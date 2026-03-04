@@ -1,0 +1,32 @@
+# Используем официальный образ PostgreSQL в качестве базового
+FROM postgres:17.4
+
+# Устанавливаем locales и postgresql-client
+RUN apt-get update && apt-get install -y locales locales-all -y postgresql-client
+
+# Копируем наши конфигурационные файлы и sql
+COPY psql-config/*.conf /etc/postgresql/postgresql.conf.d/
+COPY psql-config/*.sql /etc/postgresql/psql-data/
+
+# Создаем скрипт для копирования файлов из /etc/postgresql/postgresql.conf.d в папку с данными при инициализации
+RUN echo "cp /etc/postgresql/postgresql.conf.d/* \$PGDATA" > /docker-entrypoint-initdb.d/psql_configs.sh
+
+# Делаем скрипт исполняемым
+RUN chmod +x /docker-entrypoint-initdb.d/psql_configs.sh
+
+# Копируем скрипт и устанавливаем владельца ОДНОВРЕМЕННО
+# (Важно: Это должно быть сделано после создания скрипта)
+RUN chown postgres:postgres /docker-entrypoint-initdb.d/psql_configs.sh
+
+# Создаём скрипт для создания таблиц и его заполнения
+RUN echo "psql -U \"ST_c&Rsov@aya789\" -W \"A@RlZlMr*tNtgvrmri\" -d \"root_db\" -f /etc/postgresql/psql-data/create-tables.sql" >> /docker-entrypoint-initdb.d/init_db.sh
+RUN echo "psql -U \"ST_c&Rsov@aya789\" -W \"A@RlZlMr*tNtgvrmri\" -d \"smartTasker\" -f /etc/postgresql/psql-data/insert-data.sql" >> /docker-entrypoint-initdb.d/init_db.sh
+
+# Делаем скрипт исполняемым
+RUN chmod +x /docker-entrypoint-initdb.d/init_db.sh
+
+#Устанавливаем владельца скрипту
+RUN chown postgres:postgres /docker-entrypoint-initdb.d/init_db.sh
+
+# Эксплицитно объявляем volume, чтобы избежать потерь данных
+VOLUME /var/lib/postgresql/data

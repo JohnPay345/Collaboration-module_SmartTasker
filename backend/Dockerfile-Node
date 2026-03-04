@@ -1,0 +1,25 @@
+# Используем образ линукс Alpine с версией node 14
+FROM node:22-alpine
+
+# Указываем нашу рабочую директорию
+WORKDIR /web-api
+
+# Скорировать package.json и package-lock.json внутрь контейнера
+COPY package*.json ./
+
+# Устанавливаем зависимости
+RUN npm install
+
+# Копируем оставшиеся приложения в контейнер
+COPY . . 
+
+# Сборка приложения в /dist
+RUN npm run build
+
+# Открыть порт в нашем контейнер
+EXPOSE 8080
+
+# Запускаем наш сервер
+CMD ["npm", "start"]
+
+VOLUME /web-api

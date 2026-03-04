@@ -1,0 +1,14 @@
+<svg id="Кнопка_согласия" data-name="Кнопка согласия" xmlns="http://www.w3.org/2000/svg" width="80.812" height="56.812" viewBox="0 0 80.812 56.812">
+  <defs>
+    <style>
+      .cls-1 {
+        fill: none;
+        stroke: #2183f2;
+        stroke-width: 4px;
+        fill-rule: evenodd;
+      }
+    </style>
+  </defs>
+  <path id="Линия_6" data-name="Линия 6" class="cls-1" d="M170,605l26,26Z" transform="translate(-168.594 -575.594)"/>
+  <path id="Линия_7" data-name="Линия 7" class="cls-1" d="M194,631l54-54Z" transform="translate(-168.594 -575.594)"/>
+</svg>

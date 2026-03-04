@@ -1,0 +1,55 @@
+version: "3.9"
+services:
+  web-api:
+    build:
+      context: .  # Директория, содержащая Dockerfile
+      dockerfile: Dockerfile-Node
+    container_name: "web-api"
+    ports:
+      - '8080:8080'
+    depends_on:
+      - postgres-db
+      - rabbitmq
+    volumes:
+      - app_data:/web-api
+    networks:
+      - my_network
+    
+  postgres-db:
+    build:
+      context: .  # Директория, содержащая Dockerfile
+      dockerfile: Dockerfile-PG
+    container_name: "postgres"
+    ports:
+      - '5432:5432'
+    environment:
+      POSTGRES_USER: ST_c&Rsov@aya789
+      POSTGRES_PASSWORD: A@RlZlMr*tNtgvrmri
+      POSTGRES_DB: root_db
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    networks:
+      - my_network
+  
+  rabbitmq:
+    image: rabbitmq:4.1.0-management
+    container_name: "rabbitmq"
+    hostname: rabbitmq
+    ports:
+      - '15672:15672'
+      - '5672:5672'
+    environment:
+      RABBITMQ_DEFAULT_USER: rmuser
+      RABBITMQ_DEFAULT_PASS: rmpassword
+    volumes:
+      - rm_data:/var/lib/rabbitmq
+    networks:
+      - my_network
+
+volumes:
+  db_data:
+  app_data:
+  rm_data:
+
+networks:
+  my_network:

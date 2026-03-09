@@ -159,26 +159,26 @@ export const UserModel = {
       if (!data.hasOwnProperty("user")) {
         throw new Error("User data is required");
       }
-      const isUser = await pool.query("SELECT * FROM users WHERE id = $1", [userId]);
+      const isUser = await pool.query("SELECT user_id FROM users WHERE user_id = $1", [userId]);
       if (!isUser) {
         throw new Error("User not found");
       }
-      if (data.user.password) {
+      if (data.user?.password) {
         const salt = await bcrypt.genSalt(12);
-        data.user.password = await bcrypt.hash(password, salt);
+        data.user.password = await bcrypt.hash(data.user.password, salt);
       }
       const options = {
         tableName: "users",
         data: data.user,
         whereClause: { "user_id": userId },
-        requiredFields: ["first_name", "middle_name", "email", "password", "gender", "updated_at"],
+        requiredFields: ["first_name", "middle_name", "gender", "updated_at"],
         returningColumns: ["user_id"]
       }
       const sql = await updateDataInTable(options);
       if (sql.type == "Error") {
         throw new Error(sql.message);
       }
-      const resultUpdateUser = await pool.query(sql.message, sql.values);
+      const resultUpdateUser = await pool.query(sql.message, Array.from(sql.values.values()));
       if (!resultUpdateUser.rows.length) {
         throw new Error("The user has not been updated");
       }
@@ -186,7 +186,7 @@ export const UserModel = {
       return { type: "result", result: resultUpdateUser.rows[0] };
     } catch (error) {
       console.log(error);
-      await poll.query("ROLLBACK");
+      await pool.query("ROLLBACK");
       if (error instanceof Error) {
         return { type: "errorMsg", errorMsg: error.message };
       }

@@ -226,94 +226,137 @@ export const UserModel = {
   // Получение статистики пользователя
   getUserStats: async (userId) => {
     try {
-      // Получаем задачи пользователя
+      // Задачи пользователя (автор или исполнитель)
       const tasksResult = await pool.query(`
         WITH user_tasks AS (
-          SELECT t.* 
+          SELECT t.*
           FROM tasks t
           LEFT JOIN task_assignments ta ON t.task_id = ta.task_id
           WHERE t.author_id = $1 OR ta.user_id = $1
         )
-        SELECT 
-          COUNT(*) as total_tasks,
-          COUNT(CASE WHEN status = 'Выполнено' THEN 1 END) as completed_tasks,
-          COUNT(CASE WHEN status = 'В работе' THEN 1 END) as in_progress_tasks,
-          COUNT(CASE WHEN is_urgent = true THEN 1 END) as urgent_tasks,
-          COUNT(CASE WHEN end_date < CURRENT_DATE AND status != 'Выполнено' THEN 1 END) as overdue_tasks
+        SELECT
+          COUNT(*) AS total_tasks,
+          COUNT(CASE WHEN status = 'Выполнена' THEN 1 END) AS completed_tasks,
+          COUNT(CASE WHEN status = 'В работе' THEN 1 END) AS in_progress_tasks,
+          COUNT(CASE WHEN is_urgent = TRUE THEN 1 END) AS urgent_tasks,
+          COUNT(
+            CASE
+              WHEN end_date IS NOT NULL
+                   AND end_date < CURRENT_DATE
+                   AND status <> 'Выполнена'
+              THEN 1
+            END
+          ) AS overdue_tasks
         FROM user_tasks
       `, [userId]);
 
-      // Получаем проекты пользователя
+      // Проекты пользователя (автор или участник через project_assignments)
       const projectsResult = await pool.query(`
-        SELECT 
-          COUNT(*) as total_projects,
-          COUNT(CASE WHEN status = 'Завершен' THEN 1 END) as completed_projects,
-          COUNT(CASE WHEN status = 'В работе' THEN 1 END) as in_progress_projects,
-          COUNT(CASE WHEN is_urgent = true THEN 1 END) as urgent_projects,
-          COUNT(CASE WHEN end_date < CURRENT_DATE AND status != 'Завершен' THEN 1 END) as overdue_projects
-        FROM projects 
-        WHERE author_id = $1 OR $1 = ANY(member_ids)
+        WITH user_projects AS (
+          SELECT DISTINCT p.*
+          FROM projects p
+          LEFT JOIN project_assignments pa ON pa.project_id = p.project_id
+          WHERE p.author_id = $1 OR pa.user_id = $1
+        )
+        SELECT
+          COUNT(*) AS total_projects,
+          COUNT(CASE WHEN status = 'Выполнена' THEN 1 END) AS completed_projects,
+          COUNT(CASE WHEN status = 'В работе' THEN 1 END) AS in_progress_projects,
+          COUNT(
+            CASE
+              WHEN end_date IS NOT NULL
+                   AND end_date < CURRENT_DATE
+                   AND status <> 'Выполнена'
+              THEN 1
+            END
+          ) AS overdue_projects
+        FROM user_projects
       `, [userId]);
 
-      // Получаем цели пользователя
+      // Цели пользователя: цели проектов, в которых он автор или участник
       const goalsResult = await pool.query(`
-        SELECT 
-          COUNT(*) as total_goals,
-          COUNT(CASE WHEN goal_status = 'Достигнута' THEN 1 END) as completed_goals,
-          COUNT(CASE WHEN goal_status = 'В работе' THEN 1 END) as in_progress_goals,
-          COUNT(CASE WHEN end_date < CURRENT_DATE AND goal_status != 'Достигнута' THEN 1 END) as overdue_goals
-        FROM goals 
-        WHERE author_id = $1 OR $1 = ANY(member_ids)
+        WITH user_goals AS (
+          SELECT pg.*
+          FROM project_goals pg
+          JOIN projects p ON p.project_id = pg.project_id
+          LEFT JOIN project_assignments pa ON pa.project_id = p.project_id
+          WHERE p.author_id = $1 OR pa.user_id = $1
+        )
+        SELECT
+          COUNT(*) AS total_goals,
+          COUNT(CASE WHEN goal_status = 'Достигнута' THEN 1 END) AS completed_goals,
+          COUNT(CASE WHEN goal_status = 'В работе' THEN 1 END) AS in_progress_goals,
+          COUNT(
+            CASE
+              WHEN target_date < CURRENT_DATE
+                   AND goal_status <> 'Достигнута'
+              THEN 1
+            END
+          ) AS overdue_goals
+        FROM user_goals
       `, [userId]);
 
-      // Получаем активность пользователя
+      // Активность пользователя за последние 30 дней
       const activityResult = await pool.query(`
         WITH user_activities AS (
-          SELECT created_at FROM tasks WHERE author_id = $1
+          -- задачи: используем дату начала как точку активности
+          SELECT start_date AS activity_date
+          FROM tasks t
+          LEFT JOIN task_assignments ta ON t.task_id = ta.task_id
+          WHERE t.author_id = $1 OR ta.user_id = $1
+
           UNION ALL
-          SELECT created_at FROM task_assignments ta 
-          JOIN tasks t ON ta.task_id = t.task_id 
-          WHERE ta.user_id = $1
+
+          -- проекты
+          SELECT COALESCE(updated_at, created_at) AS activity_date
+          FROM projects p
+          LEFT JOIN project_assignments pa ON pa.project_id = p.project_id
+          WHERE p.author_id = $1 OR pa.user_id = $1
+
           UNION ALL
-          SELECT created_at FROM projects WHERE author_id = $1 OR $1 = ANY(member_ids)
-          UNION ALL
-          SELECT created_at FROM goals WHERE author_id = $1 OR $1 = ANY(member_ids)
+
+          -- цели проектов
+          SELECT target_date AS activity_date
+          FROM project_goals pg
+          JOIN projects p ON p.project_id = pg.project_id
+          LEFT JOIN project_assignments pa ON pa.project_id = p.project_id
+          WHERE p.author_id = $1 OR pa.user_id = $1
         )
-        SELECT 
-          COUNT(DISTINCT DATE(created_at)) as active_days,
-          MAX(created_at) as last_activity
+        SELECT
+          COUNT(DISTINCT DATE(activity_date)) AS active_days,
+          MAX(activity_date) AS last_activity
         FROM user_activities
-        WHERE created_at >= CURRENT_DATE - INTERVAL '30 days'
+        WHERE activity_date >= CURRENT_DATE - INTERVAL '30 days'
       `, [userId]);
 
-      // Получаем распределение задач по приоритетам
+      // Распределение задач по приоритетам
       const priorityResult = await pool.query(`
         WITH user_tasks AS (
-          SELECT t.* 
+          SELECT t.*
           FROM tasks t
           LEFT JOIN task_assignments ta ON t.task_id = ta.task_id
           WHERE t.author_id = $1 OR ta.user_id = $1
         )
-        SELECT 
+        SELECT
           priority,
-          COUNT(*) as count
+          COUNT(*) AS count
         FROM user_tasks
-        WHERE status != 'Выполнено'
+        WHERE status <> 'Выполнена'
         GROUP BY priority
         ORDER BY count DESC
       `, [userId]);
 
-      // Получаем распределение задач по статусам
+      // Распределение задач по статусам
       const statusResult = await pool.query(`
         WITH user_tasks AS (
-          SELECT t.* 
+          SELECT t.*
           FROM tasks t
           LEFT JOIN task_assignments ta ON t.task_id = ta.task_id
           WHERE t.author_id = $1 OR ta.user_id = $1
         )
-        SELECT 
+        SELECT
           status,
-          COUNT(*) as count
+          COUNT(*) AS count
         FROM user_tasks
         GROUP BY status
         ORDER BY count DESC
@@ -338,50 +381,75 @@ export const UserModel = {
     }
   },
 
-  // Получение последних активностей пользователя
+  // Получение последних активностей пользователя (по задачам, проектам и целям проектов)
   getUserRecentActivity: async (userId, limit = 10) => {
     try {
       const result = await pool.query(`
         WITH user_tasks AS (
-          SELECT t.* 
+          SELECT
+            t.task_id,
+            t.task_name,
+            t.status,
+            t.start_date,
+            t.end_date,
+            GREATEST(
+              t.start_date,
+              COALESCE(t.end_date, t.start_date)
+            ) AS activity_date
           FROM tasks t
           LEFT JOIN task_assignments ta ON t.task_id = ta.task_id
           WHERE t.author_id = $1 OR ta.user_id = $1
+        ),
+        user_projects AS (
+          SELECT
+            DISTINCT p.project_id,
+            p.project_name,
+            p.status,
+            COALESCE(p.updated_at, p.created_at) AS activity_date
+          FROM projects p
+          LEFT JOIN project_assignments pa ON pa.project_id = p.project_id
+          WHERE p.author_id = $1 OR pa.user_id = $1
+        ),
+        user_goals AS (
+          SELECT
+            pg.project_goal_id,
+            pg.goal_name,
+            pg.goal_status,
+            pg.target_date AS activity_date
+          FROM project_goals pg
+          JOIN projects p ON p.project_id = pg.project_id
+          LEFT JOIN project_assignments pa ON pa.project_id = p.project_id
+          WHERE p.author_id = $1 OR pa.user_id = $1
         )
-        SELECT 
-          'task' as type,
-          task_id as id,
-          task_name as name,
-          status,
-          created_at,
-          updated_at
-        FROM user_tasks
-        
+        SELECT
+          'task' AS type,
+          ut.task_id AS id,
+          ut.task_name AS name,
+          ut.status,
+          ut.activity_date
+        FROM user_tasks ut
+
         UNION ALL
-        
-        SELECT 
-          'project' as type,
-          project_id as id,
-          project_name as name,
-          status,
-          created_at,
-          updated_at
-        FROM projects 
-        WHERE author_id = $1 OR $1 = ANY(member_ids)
-        
+
+        SELECT
+          'project' AS type,
+          up.project_id AS id,
+          up.project_name AS name,
+          up.status,
+          up.activity_date
+        FROM user_projects up
+
         UNION ALL
-        
-        SELECT 
-          'goal' as type,
-          goal_id as id,
-          goal_name as name,
-          goal_status as status,
-          created_at,
-          updated_at
-        FROM goals 
-        WHERE author_id = $1 OR $1 = ANY(member_ids)
-        
-        ORDER BY updated_at DESC
+
+        SELECT
+          'goal' AS type,
+          ug.project_goal_id AS id,
+          ug.goal_name AS name,
+          ug.goal_status AS status,
+          ug.activity_date
+        FROM user_goals ug
+
+        ORDER BY activity_date DESC
         LIMIT $2
       `, [userId, limit]);
 
@@ -392,7 +460,7 @@ export const UserModel = {
     }
   },
 
-  // Получение эффективности пользователя
+  // Получение эффективности пользователя (динамика созданных/завершённых сущностей)
   getUserPerformance: async (userId, days = 30) => {
     try {
       const result = await pool.query(`
@@ -401,37 +469,55 @@ export const UserModel = {
             CURRENT_DATE - ($2 || ' days')::interval,
             CURRENT_DATE,
             '1 day'::interval
-          )::date as date
+          )::date AS date
         ),
         user_activities AS (
-          SELECT created_at, status FROM tasks WHERE author_id = $1
+          -- задачи
+          SELECT
+            t.start_date AS activity_date,
+            t.status
+          FROM tasks t
+          LEFT JOIN task_assignments ta ON t.task_id = ta.task_id
+          WHERE t.author_id = $1 OR ta.user_id = $1
+
           UNION ALL
-          SELECT t.created_at, t.status 
-          FROM task_assignments ta 
-          JOIN tasks t ON ta.task_id = t.task_id 
-          WHERE ta.user_id = $1
+
+          -- проекты
+          SELECT
+            COALESCE(p.updated_at, p.created_at) AS activity_date,
+            p.status
+          FROM projects p
+          LEFT JOIN project_assignments pa ON pa.project_id = p.project_id
+          WHERE p.author_id = $1 OR pa.user_id = $1
+
           UNION ALL
-          SELECT created_at, status FROM projects 
-          WHERE author_id = $1 OR $1 = ANY(member_ids)
-          UNION ALL
-          SELECT created_at, goal_status as status FROM goals 
-          WHERE author_id = $1 OR $1 = ANY(member_ids)
+
+          -- цели проектов
+          SELECT
+            pg.target_date AS activity_date,
+            pg.goal_status AS status
+          FROM project_goals pg
+          JOIN projects p ON p.project_id = pg.project_id
+          LEFT JOIN project_assignments pa ON pa.project_id = p.project_id
+          WHERE p.author_id = $1 OR pa.user_id = $1
         ),
         daily_stats AS (
-          SELECT 
-            DATE(created_at) as date,
-            COUNT(*) as created_count,
-            COUNT(CASE 
-              WHEN status IN ('Выполнено', 'Завершен', 'Достигнута') 
-              THEN 1 
-            END) as completed_count
+          SELECT
+            DATE(activity_date) AS date,
+            COUNT(*) AS created_count,
+            COUNT(
+              CASE
+                WHEN status IN ('Выполнена', 'Достигнута')
+                THEN 1
+              END
+            ) AS completed_count
           FROM user_activities
-          GROUP BY DATE(created_at)
+          GROUP BY DATE(activity_date)
         )
-        SELECT 
+        SELECT
           dr.date,
-          COALESCE(ds.created_count, 0) as created_count,
-          COALESCE(ds.completed_count, 0) as completed_count
+          COALESCE(ds.created_count, 0) AS created_count,
+          COALESCE(ds.completed_count, 0) AS completed_count
         FROM date_range dr
         LEFT JOIN daily_stats ds ON dr.date = ds.date
         ORDER BY dr.date

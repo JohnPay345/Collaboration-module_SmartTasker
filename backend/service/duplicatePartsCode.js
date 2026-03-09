@@ -297,7 +297,7 @@ export const updateDataInTable = async (options) => {
     }
     const setString = setClauses.join(', ');
     const whereString = whereClauses.join(' AND ');
-    const sql = `
+    let sql = `
       UPDATE "${tableName}"
       SET ${setString}
       WHERE ${whereString}

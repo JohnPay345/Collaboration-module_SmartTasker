@@ -1,5 +1,3 @@
--- Таблицы будут заполняться мок (mock) данными
-
 -- Вставка данных в таблицу users
 INSERT INTO users (first_name, middle_name, last_name, email, phone_number, password, birth_date, start_date, gender, address, job_title, avatarPath, skills, created_user_id, created_at, updated_at) VALUES
 ('Иван', 'Иванович', 'Петров', 'ivan.petrov@example.com', '+79123456789', crypt('password123', gen_salt('bf')), '1990-05-15', '2020-01-10', 'Мужчина',
@@ -198,7 +196,22 @@ value, effort, estimated_duration, priority_assessment, qualification_assessment
 SELECT
   pd.goal_name || ' - Задача', -- task_name формируем на основе goal_name
   'Описание задачи для ' || pd.goal_name, -- description
-  (SELECT user_id FROM users ORDER BY random() LIMIT 1), -- author_id
+  (
+    SELECT COALESCE(
+      (
+        SELECT pa.user_id
+        FROM project_assignments pa
+        WHERE pa.project_id = pd.project_id
+        ORDER BY random()
+        LIMIT 1
+      ),
+      (
+        SELECT p.author_id
+        FROM projects p
+        WHERE p.project_id = pd.project_id
+      )
+    )
+  ), -- author_id: случайный участник проекта (или автор, если участников нет)
   pd.project_id, -- project_id
   pd.project_goal_id,  -- goal_id
   NOW() - INTERVAL '1 week',  -- start_date

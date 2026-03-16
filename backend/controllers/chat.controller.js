@@ -3,7 +3,6 @@ import { errorReplyCodes, replyResult } from '#root/service/duplicatePartsCode.j
 import { publishChatMessage } from '#rmq/chatPublisher.js';
 
 export const ChatController = {
-  /** GET /api/chats/:userId/with/:peerId — получить или создать чат с коллегой */
   getOrCreateChat: async (req, rep) => {
     const { userId, peerId } = req.params;
     const reqUserId = req.user?.userId;
@@ -19,7 +18,6 @@ export const ChatController = {
     }
   },
 
-  /** GET /api/chats/:userId/:chatId/messages?limit=50&offset=0 */
   getMessages: async (req, rep) => {
     const { userId, chatId } = req.params;
     const reqUserId = req.user?.userId;

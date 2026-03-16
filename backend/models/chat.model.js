@@ -3,7 +3,6 @@ import { pool } from '#root/service/connection.js';
 const MESSAGES_PAGE_SIZE = 50;
 
 export const ChatModel = {
-  /** Получить или создать личный чат между двумя пользователями */
   getOrCreatePrivateChat: async (userId1, userId2) => {
     try {
       const existing = await pool.query(
@@ -34,7 +33,6 @@ export const ChatModel = {
     }
   },
 
-  /** Список сообщений чата: по 50 за раз, от старых к новым (offset = страница) */
   getMessages: async (chatId, limit = MESSAGES_PAGE_SIZE, offset = 0) => {
     try {
       const result = await pool.query(
@@ -52,7 +50,6 @@ export const ChatModel = {
     }
   },
 
-  /** Добавить сообщение и вернуть его */
   addMessage: async (chatId, userId, messageText, messageType = 'text') => {
     try {
       const result = await pool.query(
@@ -68,7 +65,6 @@ export const ChatModel = {
     }
   },
 
-  /** Id участников чата (для доставки через RabbitMQ) */
   getChatMemberUserIds: async (chatId) => {
     try {
       const result = await pool.query(
@@ -82,7 +78,6 @@ export const ChatModel = {
     }
   },
 
-  /** Проверка, что пользователь участник чата */
   isMember: async (chatId, userId) => {
     try {
       const result = await pool.query(

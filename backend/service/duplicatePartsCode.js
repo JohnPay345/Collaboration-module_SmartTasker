@@ -74,6 +74,7 @@ export const selectDataInTable = async (options) => {
       limit,
       offset,
       join,
+      groupBy
     } = options;
     let sql = 'SELECT ';
     sql += Array.isArray(columns) ? columns.join(', ') : columns;
@@ -148,6 +149,9 @@ export const selectDataInTable = async (options) => {
         whereClause = ' WHERE ' + whereClauses.join(' AND ');
         sql += whereClause;
       }
+    }
+    if (groupBy && Array.isArray(groupBy) && groupBy.length > 0) {
+      sql += ` GROUP BY ${groupBy.join(", ")}`;
     }
     if (orderBy) {
       sql += ` ORDER BY ${orderBy} ${orderDirection.toUpperCase()}`;

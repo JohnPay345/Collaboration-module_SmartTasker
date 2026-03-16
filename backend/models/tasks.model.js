@@ -53,7 +53,7 @@ export const TasksModel = {
             on: "t.task_id = tc.task_id"
           }
         ],
-        where: { "task_id": taskId }
+        where: { "t.task_id": taskId }
       }
       const sql = await selectDataInTable(options);
       if (sql.type == "Error") {
@@ -93,6 +93,9 @@ export const TasksModel = {
       if (data.hasOwnProperty("assignments")) {
         const task_id = resultCreateTask.rows[0].task_id;
         const users_id = data.assignments;
+        if(!users_id.length) {
+          throw new Error("The array of assigned users was not found");
+        }
         const checkUsersExists = await pool.query("SELECT user_id FROM users WHERE user_id = ANY($1)", [users_id]);
         const existingUsersId = checkUsersExists.rows.map(row => row.user_id);
         const nonExistingUsers = users_id.filter(userId => !existingUsersId.includes(userId));
@@ -101,7 +104,7 @@ export const TasksModel = {
         }
         for (const user_id of existingUsersId) {
           const resultTaskAssignments = await pool.query(`INSERT INTO task_assignments (task_id, user_id, assigned_at, is_completed) \
-          VALUES ($1, $2, DEFAULT, DEFAULT) RERURNING task_assignment_id`, [task_id, user_id]);
+          VALUES ($1, $2, DEFAULT, DEFAULT) RETURNING task_assignment_id`, [task_id, user_id]);
           const notificationData = {
             data: {
               userId: user_id,
@@ -121,7 +124,7 @@ export const TasksModel = {
           }
         }
       }
-      const notificationData = {
+      /*const notificationData = {
         data: {
           userId: resultCreateTask.rows[0].task_id,
           eventType: "task.created",
@@ -133,9 +136,9 @@ export const TasksModel = {
           }
         }
       }
-      publishMessage("task", "task.created", notificationData);
+      publishMessage("task", "task.created", notificationData);*/
       await pool.query("COMMIT");
-      return { type: "result", result: result.rows[0] };
+      return { type: "result", result: resultCreateTask.rows[0] };
     } catch (error) {
       await pool.query("ROLLBACK");
       if (error instanceof Error) {
@@ -170,6 +173,9 @@ export const TasksModel = {
       if (data.hasOwnProperty("assignments")) {
         const task_id = resultUpdateTask.rows[0].task_id;
         const users_id = data.assignments;
+        if(!users_id.length) {
+          throw new Error("The array of assigned users was not found");
+        }
         const checkUsersExists = await pool.query("SELECT user_id FROM users WHERE user_id = ANY($1)", [users_id]);
         const checkUsersAssignments = await pool.query("SELECT user_id FROM task_assignments WHERE user_id = ANY($1)", [users_id]);
         const existingUsersId = checkUsersExists.rows.map(row => row.user_id);

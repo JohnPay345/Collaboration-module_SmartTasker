@@ -3,10 +3,10 @@ import { authenticateToken, verifyRefreshToken } from "#root/middleware/authenti
 
 export const TasksRoutes = (fastify, options, done) => {
   fastify.get("/tasks/:userId/list", { preHandler: authenticateToken }, TasksController.GetTasksByUserId);
-  fastify.get("/tasks/:userId/:taskId", TasksController.GetTaskById);
-  fastify.post("/tasks/:userId", TasksController.CreateTask);
-  fastify.put("/tasks/:userId/:taskId", TasksController.UpdateTaskById);
-  fastify.delete("/tasks/:userId/:taskId", TasksController.DeleteTaskById);
+  fastify.get("/tasks/:userId/:taskId", { preHandler: authenticateToken }, TasksController.GetTaskById);
+  fastify.post("/tasks/:userId", { preHandler: authenticateToken }, TasksController.CreateTask);
+  fastify.put("/tasks/:userId/:taskId", { preHandler: authenticateToken }, TasksController.UpdateTaskById);
+  fastify.delete("/tasks/:userId/:taskId",  { preHandler: authenticateToken },TasksController.DeleteTaskById);
 
   done();
 }

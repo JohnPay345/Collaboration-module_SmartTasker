@@ -24,7 +24,7 @@ export const NotificationsModel = {
         FROM "user_notifications_settings" WHERE user_id = $1`,
         [userId]
       );
-      if (!result.rows[0].length) {
+      if (!Object.keys(result.rows[0]).length) {
         return { type: "errorMsg", errorMsg: `Notifications settings for user ${userId} not found` };
       }
       return { type: "result", result: result.rows[0] };
@@ -115,11 +115,11 @@ export const NotificationsModel = {
       await pool.query("BEGIN");
       const { userId, eventType, title, body, data } = notificationData;
       const result = await pool.query(
-        `INSERT INTO notifications (user_id, notification_type, notification_title, notification_body, \
+        `INSERT INTO in_app_notifications (user_id, notification_type, notification_title, notification_body, \
         notification_data, created_at) VALUES ($1, $2, $3, $4, $5, NOW()) RETURNING notification_id`,
         [userId, eventType, title, body, JSON.stringify(data)]
       );
-      if (!result.rows[0].length) {
+      if (!result.rows.length) {
         throw new Error(`Failed to insert in-app notification for user ${userId}`);
       }
       await pool.query("COMMIT");

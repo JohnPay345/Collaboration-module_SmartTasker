@@ -13,7 +13,7 @@ export const publishMessage = async (type, action, message) => {
     const userId = message.data.userId;
     const { allowedInAppNotifications, allowedPushNotifications, allowedEvent } = await checkSettingsNotifications(userId, message.data.eventType);
     const saveInAppNotification = await NotificationsModel.saveInAppNotification(message.data);
-    if (saveInAppNotification.type == 'errorMsg') {
+    if (saveInAppNotification?.type == 'errorMsg') {
       console.error('Failed to save in-app notification to database');
       return;
     }
@@ -67,12 +67,13 @@ const checkSettingsNotifications = async (userId, eventType) => {
       console.error('Failed to get user notification settings:', getSettingsNotifications.errorMsg);
       return false;
     }
-    const allowedInAppNotifications = getSettingsNotifications.result.notifications_settings?.inapp;
+    const allowedInAppNotifications = getSettingsNotifications.result.notification?.inapp;
+    const settingsNotifications = getSettingsNotifications.result;
     const allowedPushNotifications = getSettingsNotifications.result.notifications_settings?.push;
     let allowedEvent = false;
-    if (allowedInAppNotifications.notifications_tasks && allowedInAppNotifications.notifications_tasks[eventType] == true) {
+    if (settingsNotifications.notifications_settings_tasks && settingsNotifications.notifications_settings_tasks[eventType] == true) {
       allowedEvent = true;
-    } else if (allowedInAppNotifications.notifications_projects && allowedInAppNotifications.notifications_projects[eventType] == true) {
+    } else if (settingsNotifications.notifications_settings_projects && settingsNotifications.notifications_settings_projects[eventType] == true) {
       allowedEvent = true;
     } else {
       console.log(`Event type ${eventType} not found in notification_settings for user ${userId}`);

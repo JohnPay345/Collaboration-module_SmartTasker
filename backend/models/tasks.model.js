@@ -13,7 +13,8 @@ export const TasksModel = {
         columns: ["task_id", "task_name", "author_id", "project_id",
           "start_date", "end_date", "status", "is_urgent", "priority",
           "value", "effort", "estimated_duration", "priority_assessment",
-          "qualification_assessment", "load_assessment", "required_skills"],
+          "qualification_assessment", "load_assessment", "required_skills",
+          "created_at", "updated_at"],
         where: { "author_id": userId }
       }
       const sql = await selectDataInTable(options);
@@ -39,8 +40,9 @@ export const TasksModel = {
         columns: ["t.task_id", "t.task_name", "t.description", "t.author_id", "t.project_id", "t.goal_id",
           "t.start_date", "t.end_date", "t.status", "t.is_urgent", "t.priority", "t.value", "t.effort",
           "t.estimated_duration", "t.priority_assessment", "t.qualification_assessment",
-          "t.load_assessment", "t.required_skills", "ta.user_id", "ta.is_completed", "tc.comment_id",
-          "tc.comment_text", "tc.created_at", "tc.updated_at", "tc.is_edited"],
+          "t.load_assessment", "t.required_skills", "t.created_at", "t.updated_at", 
+          "ta.user_id", "ta.is_completed", "tc.comment_id", "tc.comment_text", "tc.created_at",
+          "tc.updated_at", "tc.is_edited"],
         join: [
           {
             table: [["task_assignments", "ta"]],
@@ -79,7 +81,7 @@ export const TasksModel = {
         data: data.task,
         requiredFields: ["task_name", "author_id", "start_date", "status", "priority",
           "value", "effort", "estimated_duration", "priority_assessment", "qualification_assessment",
-          "load_assessment"],
+          "load_assessment", "created_at", "updated_at"],
         returningColumns: ["task_id"]
       }
       const sql = await insertDataInTable(options);
@@ -159,7 +161,7 @@ export const TasksModel = {
         whereClause: { "task_id": taskId },
         requiredFields: ["task_name", "author_id", 'start_date', "status", "priority",
           "value", "effort", "estimated_duration", "priority_assessment", "qualification_assessment",
-          "load_assessment"],
+          "load_assessment", "updated_at"],
         returningColumns: ["task_id"]
       }
       const sql = await updateDataInTable(options);

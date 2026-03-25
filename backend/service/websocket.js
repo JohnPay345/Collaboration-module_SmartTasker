@@ -1,21 +1,30 @@
 import { WebSocketServer } from 'ws';
 import { WebSocket } from 'ws';
-
+// TODO: Разобраться с websocket подключением
 export const webSocketService = {
   wss: null,
   connectedUsers: new Map(),
   setupWebsocketServer: (server) => {
-    webSocketService.wss = new WebSocketServer({ server: server, path: '/ws' });
+    webSocketService.wss = new WebSocketServer({ server: server });
+
+    webSocketService.wss.shouldHandle = function (req) {
+      const pathname = (req.url || '').split('?')[0];
+      return pathname === '/ws' || pathname.startsWith('/ws/');
+    };
+
     webSocketService.wss.on('connection', (ws, req) => {
-      const userId = req.url.substring(req.url.lastIndexOf('/') + 1);
-      console.log(userId);
+      const pathname = (req.url || '').split('?')[0];
+      const segments = pathname.split('/').filter(Boolean);
+      const userId = segments.length >= 2 ? segments[1] : null;
+
       if (!userId) {
-        console.warn('Websocket connection without user ID.');
+        console.warn('Websocket connection without user ID:', pathname);
         ws.close();
         return;
       }
+
       webSocketService.connectedUsers.set(userId, ws);
-      console.log(`Client connected: ${userId}`);
+      console.log(`Client connected: ${userId} (${pathname})`);
       ws.on('close', () => {
         console.log(`Client disconnected: ${userId}`);
         webSocketService.connectedUsers.delete(userId);

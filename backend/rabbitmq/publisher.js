@@ -71,9 +71,9 @@ const checkSettingsNotifications = async (userId, eventType) => {
     const settingsNotifications = getSettingsNotifications.result;
     const allowedPushNotifications = getSettingsNotifications.result.notifications_settings?.push;
     let allowedEvent = false;
-    if (settingsNotifications.notifications_settings_tasks && settingsNotifications.notifications_settings_tasks[eventType] == true) {
+    if (settingsNotifications.notifications_settings_tasks && settingsNotifications.notifications_settings_tasks[eventType]) {
       allowedEvent = true;
-    } else if (settingsNotifications.notifications_settings_projects && settingsNotifications.notifications_settings_projects[eventType] == true) {
+    } else if (settingsNotifications.notifications_settings_projects && settingsNotifications.notifications_settings_projects[eventType]) {
       allowedEvent = true;
     } else {
       console.log(`Event type ${eventType} not found in notification_settings for user ${userId}`);

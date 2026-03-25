@@ -60,6 +60,13 @@ export const errorReplyCodes = {
   },
 }
 
+export const checkUserExist = async (pool, users_id) => {
+  const checkUsersExists = await pool.query("SELECT user_id FROM users WHERE user_id = ANY($1)", [users_id]);
+  const existingUsersId = checkUsersExists.rows.map(row => row.user_id);
+  const nonExistingUsers = users_id.filter(userId => !existingUsersId.includes(userId));
+  return {existingUsersId, nonExistingUsers};
+}
+
 export const selectDataInTable = async (options) => {
   try {
     if (!options || !options.table) {

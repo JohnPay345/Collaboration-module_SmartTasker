@@ -223,13 +223,18 @@ export const UserModel = {
       return { type: "errorMsg", errorMsg: "Error in Model updateTokens" };
     }
   },
+  // TODO: getUserStats, getUserRecentActivity, getUserPerformance привести к одной фукнции
   // Получение статистики пользователя
   getUserStats: async (userId) => {
     try {
       // Задачи пользователя (автор или исполнитель)
       const tasksResult = await pool.query(`
         WITH user_tasks AS (
-          SELECT t.*
+          SELECT DISTINCT
+            t.task_id,
+            t.status,
+            t.is_urgent,
+            t.end_date
           FROM tasks t
           LEFT JOIN task_assignments ta ON t.task_id = ta.task_id
           WHERE t.author_id = $1 OR ta.user_id = $1
@@ -253,7 +258,10 @@ export const UserModel = {
       // Проекты пользователя (автор или участник через project_assignments)
       const projectsResult = await pool.query(`
         WITH user_projects AS (
-          SELECT DISTINCT p.*
+          SELECT DISTINCT
+            p.project_id,
+            p.status,
+            p.end_date
           FROM projects p
           LEFT JOIN project_assignments pa ON pa.project_id = p.project_id
           WHERE p.author_id = $1 OR pa.user_id = $1
@@ -276,7 +284,10 @@ export const UserModel = {
       // Цели пользователя: цели проектов, в которых он автор или участник
       const goalsResult = await pool.query(`
         WITH user_goals AS (
-          SELECT pg.*
+          SELECT DISTINCT
+            pg.project_goal_id,
+            pg.goal_status,
+            pg.target_date
           FROM project_goals pg
           JOIN projects p ON p.project_id = pg.project_id
           LEFT JOIN project_assignments pa ON pa.project_id = p.project_id
@@ -300,7 +311,7 @@ export const UserModel = {
       const activityResult = await pool.query(`
         WITH user_activities AS (
           -- задачи: используем дату начала как точку активности
-          SELECT start_date AS activity_date
+          SELECT COALESCE(t.updated_at, t.created_at) AS activity_date
           FROM tasks t
           LEFT JOIN task_assignments ta ON t.task_id = ta.task_id
           WHERE t.author_id = $1 OR ta.user_id = $1
@@ -332,7 +343,10 @@ export const UserModel = {
       // Распределение задач по приоритетам
       const priorityResult = await pool.query(`
         WITH user_tasks AS (
-          SELECT t.*
+          SELECT DISTINCT
+            t.task_id,
+            t.priority,
+            t.status
           FROM tasks t
           LEFT JOIN task_assignments ta ON t.task_id = ta.task_id
           WHERE t.author_id = $1 OR ta.user_id = $1
@@ -349,7 +363,9 @@ export const UserModel = {
       // Распределение задач по статусам
       const statusResult = await pool.query(`
         WITH user_tasks AS (
-          SELECT t.*
+          SELECT DISTINCT
+            t.task_id,
+            t.status
           FROM tasks t
           LEFT JOIN task_assignments ta ON t.task_id = ta.task_id
           WHERE t.author_id = $1 OR ta.user_id = $1
@@ -386,16 +402,11 @@ export const UserModel = {
     try {
       const result = await pool.query(`
         WITH user_tasks AS (
-          SELECT
+          SELECT DISTINCT
             t.task_id,
             t.task_name,
             t.status,
-            t.start_date,
-            t.end_date,
-            GREATEST(
-              t.start_date,
-              COALESCE(t.end_date, t.start_date)
-            ) AS activity_date
+            COALESCE(t.updated_at, t.created_at) AS activity_date
           FROM tasks t
           LEFT JOIN task_assignments ta ON t.task_id = ta.task_id
           WHERE t.author_id = $1 OR ta.user_id = $1
@@ -411,7 +422,7 @@ export const UserModel = {
           WHERE p.author_id = $1 OR pa.user_id = $1
         ),
         user_goals AS (
-          SELECT
+          SELECT DISTINCT
             pg.project_goal_id,
             pg.goal_name,
             pg.goal_status,
@@ -425,7 +436,7 @@ export const UserModel = {
           'task' AS type,
           ut.task_id AS id,
           ut.task_name AS name,
-          ut.status,
+          ut.status::text AS status,
           ut.activity_date
         FROM user_tasks ut
 
@@ -435,7 +446,7 @@ export const UserModel = {
           'project' AS type,
           up.project_id AS id,
           up.project_name AS name,
-          up.status,
+          up.status::text AS status,
           up.activity_date
         FROM user_projects up
 
@@ -445,7 +456,7 @@ export const UserModel = {
           'goal' AS type,
           ug.project_goal_id AS id,
           ug.goal_name AS name,
-          ug.goal_status AS status,
+          ug.goal_status::text AS status,
           ug.activity_date
         FROM user_goals ug
 
@@ -474,8 +485,9 @@ export const UserModel = {
         user_activities AS (
           -- задачи
           SELECT
-            t.start_date AS activity_date,
-            t.status
+            t.task_id AS entity_id,
+            COALESCE(t.updated_at, t.created_at) AS activity_date,
+            t.status::text AS status
           FROM tasks t
           LEFT JOIN task_assignments ta ON t.task_id = ta.task_id
           WHERE t.author_id = $1 OR ta.user_id = $1
@@ -484,8 +496,9 @@ export const UserModel = {
 
           -- проекты
           SELECT
+            p.project_id AS entity_id,
             COALESCE(p.updated_at, p.created_at) AS activity_date,
-            p.status
+            p.status::text AS status
           FROM projects p
           LEFT JOIN project_assignments pa ON pa.project_id = p.project_id
           WHERE p.author_id = $1 OR pa.user_id = $1
@@ -494,8 +507,9 @@ export const UserModel = {
 
           -- цели проектов
           SELECT
+            pg.project_goal_id AS entity_id,
             pg.target_date AS activity_date,
-            pg.goal_status AS status
+            pg.goal_status::text AS status
           FROM project_goals pg
           JOIN projects p ON p.project_id = pg.project_id
           LEFT JOIN project_assignments pa ON pa.project_id = p.project_id
@@ -504,13 +518,10 @@ export const UserModel = {
         daily_stats AS (
           SELECT
             DATE(activity_date) AS date,
-            COUNT(*) AS created_count,
-            COUNT(
-              CASE
-                WHEN status IN ('Выполнена', 'Достигнута')
-                THEN 1
-              END
-            ) AS completed_count
+            COUNT(DISTINCT entity_id) AS created_count,
+            COUNT(DISTINCT CASE
+              WHEN status IN ('Выполнена', 'Достигнута') THEN entity_id
+            END) AS completed_count
           FROM user_activities
           GROUP BY DATE(activity_date)
         )

@@ -125,7 +125,10 @@ CREATE TABLE IF NOT EXISTS user_notifications_settings(
     "project.created": true,
     "project.updated": true,
     "project.completed": true,
+    "project.assigned": true,
+    "project.unassigned": true,
     "project.goal_completed": true,
+    "project.goals": true,
     "project.status_changed": true,
     "project.date_changed": true,
     "project.task_created": true,
@@ -204,7 +207,9 @@ CREATE TABLE IF NOT EXISTS tasks (
   priority_assessment INT NOT NULL, -- Оценка приориета
   qualification_assessment INT NOT NULL, -- Оценка квалификации
   load_assessment INT NOT NULL, -- Оценка нагрузки
-  required_skills TEXT[] -- Массив навыков для задач
+  required_skills TEXT[], -- Массив навыков для задач
+  created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(), -- Дата создания задачи
+  updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW() -- Дата обновления задачи
 );
 
 -- Создание таблицы task_assignments (Назначения задач пользователям)

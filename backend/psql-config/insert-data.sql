@@ -192,7 +192,7 @@ WITH project_data AS (
 
 -- Вставляем задачи для каждого проекта (в соответствии с количеством целей)
 INSERT INTO tasks (task_name, description, author_id, project_id, goal_id, start_date, end_date, status, is_urgent, priority,
-value, effort, estimated_duration, priority_assessment, qualification_assessment, load_assessment, required_skills)
+value, effort, estimated_duration, priority_assessment, qualification_assessment, load_assessment, required_skills, created_at, updated_at)
 SELECT
   pd.goal_name || ' - Задача', -- task_name формируем на основе goal_name
   'Описание задачи для ' || pd.goal_name, -- description
@@ -214,8 +214,8 @@ SELECT
   ), -- author_id: случайный участник проекта (или автор, если участников нет)
   pd.project_id, -- project_id
   pd.project_goal_id,  -- goal_id
-  NOW() - INTERVAL '1 week',  -- start_date
-  NOW() + INTERVAL '1 week',  -- end_date
+  td.start_date,  -- start_date (из created_at)
+  td.end_date,  -- end_date (из updated_at)
   CASE
     WHEN random() < 0.8 THEN 'В работе'::task_status_type -- status_status (80% "В работе")
     ELSE 'Черновик'::task_status_type
@@ -228,27 +228,56 @@ SELECT
   floor(random() * 10)::int, -- priority_assessment
   floor(random() * 10)::int, -- qualification_assessment
   floor(random() * 10)::int,  -- load_assessment
-  ARRAY['SQL', 'Backend', 'Frontend']::TEXT[]  -- required_skills
-FROM project_data pd;
+  ARRAY['SQL', 'Backend', 'Frontend']::TEXT[] , -- required_skills
+  td.created_at, -- created_at
+  td.updated_at -- updated_at
+FROM project_data pd
+      CROSS JOIN LATERAL (
+  SELECT
+    created_ts::timestamp AS created_at,
+    updated_ts::timestamp AS updated_at,
+    created_ts::date AS start_date,
+    updated_ts::date AS end_date
+  FROM (
+    SELECT
+      created_ts,
+      LEAST(
+        created_ts + ((floor(random() * 20)::int + 1) * INTERVAL '1 day'),
+        NOW()
+      ) AS updated_ts
+    FROM (
+      SELECT
+        NOW() - ((floor(random() * 60)::int + 1) * INTERVAL '1 day') AS created_ts
+    ) x
+  ) y
+) td;
 
 -- Для каждой задачи создадим task_assignments (назначения)
-WITH task_ids AS (
-  SELECT task_id
-  FROM tasks
-  ORDER BY start_date DESC
+WITH task_with_project AS (
+  SELECT
+    t.task_id,
+    t.project_id,
+    ROW_NUMBER() OVER (ORDER BY t.start_date DESC) AS task_rn
+  FROM tasks t
+),
+project_participants AS (
+  -- Участники проекта; если нет записей в project_assignments, берём автора проекта
+  SELECT
+    p.project_id,
+    COALESCE(pa.user_id, p.author_id) AS user_id,
+    ROW_NUMBER() OVER (PARTITION BY p.project_id ORDER BY random()) AS rn,
+    COUNT(*) OVER (PARTITION BY p.project_id) AS cnt
+  FROM projects p
+  LEFT JOIN project_assignments pa ON pa.project_id = p.project_id
 )
 INSERT INTO task_assignments (task_id, user_id)
-SELECT task_id, (
-  SELECT user_id
-  FROM users
-  ORDER BY random()
-  LIMIT 1
-) FROM task_ids
-ORDER BY random()
-LIMIT (
-  SELECT count(*)
-  FROM task_ids
-);
+SELECT
+  twp.task_id,
+  pp.user_id
+FROM task_with_project twp
+JOIN project_participants pp
+  ON pp.project_id = twp.project_id
+ AND pp.rn = 1 + ((twp.task_rn - 1) % pp.cnt);
 
 -- Добавим немного комментариев (не для всех задач)
 WITH task_ids AS (

@@ -1,7 +1,7 @@
 import { config } from "dotenv";
 import { evaluate } from "mathjs";
 import { pool } from "#root/service/connection.js";
-import { insertDataInTable, selectDataInTable, updateDataInTable } from "#root/service/duplicatePartsCode.js";
+import { insertDataInTable, selectDataInTable, updateDataInTable, checkUserExist } from "#root/service/duplicatePartsCode.js";
 import { publishMessage } from "#rmq/publisher.js";
 
 config();
@@ -15,15 +15,17 @@ export const ProjectsModel = {
         where: { "author_id": userId }
       }
       const sql = await selectDataInTable(getProjectOptions);
+      console.log(sql.message)
       if (sql.type == "Error") {
         return { type: "errorMsg", errorMsg: sql.message };
       }
       const result = await pool.query(sql.message, sql.values);
       if (!result.rows.length) {
-        return { type: "errorMsg", errorMsg: "List projects not found" };
+        return { type: "result", result: "List projects not found" };
       }
       const projectsId = result.rows.map(row => row.project_id);
       let resultsEvaluate = [];
+      // TODO: Сделать всё в один запрос (подзапросы)
       for (let projectId of projectsId) {
         const getTasksProject = {
           table: [["tasks", "t"]],
@@ -74,9 +76,19 @@ export const ProjectsModel = {
         table: [
           ["projects", "p"]
         ],
-        columns: ["p.project_id", "p.project_name", "p.project_description", "p.start_date",
-          "p.end_date", "p.status", "p.author_id", "p.tags", "pg.project_goal_id", "pg.goal_name",
-          "pg.goal_description", "pg.target_date", "pg.goal_status", "pa.project_assignment_id", "pa.user_id"],
+        columns: ["p.project_id", "p.project_name", "p.description", "p.start_date",
+          "p.end_date", "p.status", "p.author_id", "p.tags",
+          `json_agg(DISTINCT json_build_object(
+            'project_goal_id', pg.project_goal_id,
+            'goal_name', pg.goal_name,
+            'goal_description', pg.goal_description,
+            'target_date', pg.target_date,
+            'goal_status', pg.goal_status
+          )::jsonb) FILTER (WHERE pg.project_goal_id IS NOT NULL) AS goals`,
+          `json_agg(DISTINCT json_build_object(
+            'project_assignment_id', pa.project_assignment_id,
+            'user_id', pa.user_id
+          )::jsonb) FILTER (WHERE pa.project_assignment_id IS NOT NULL) AS assignments`],
         join: [
           {
             table: [["project_goals", "pg"]],
@@ -89,7 +101,8 @@ export const ProjectsModel = {
             on: "p.project_id = pa.project_id"
           }
         ],
-        where: { "p.project_id": projectId }
+        where: { "p.project_id": projectId },
+        groupBy: ["p.project_id"]
       };
       const sqlGetProjects = await selectDataInTable(options);
       if (sqlGetProjects.type == "Error") {
@@ -104,13 +117,16 @@ export const ProjectsModel = {
       return { type: "errorMsg", errorMsg: "Error in Model getProjectsById" };
     }
   },
-  createProject: async (data) => {
+  createProject: async (data, userId) => {
     try {
       await pool.query("BEGIN");
+      if(!data.hasOwnProperty("project")) {
+        throw new Error("Project data is required");
+      }
       const options = {
-        table: "projects",
+        tableName: "projects",
         data: data.project,
-        columns: ["project_name", "project_description", "status", "author_id"],
+        columns: ["project_name", "description", "status", "author_id"],
         where: { "author_id": userId },
         returningColumns: ["project_id"]
       }
@@ -125,15 +141,19 @@ export const ProjectsModel = {
       if (data.hasOwnProperty("assignments")) {
         const project_id = resultCreateProject.rows[0].project_id;
         const users_id = data.assignments;
-        const checkUsersExists = await pool.query("SELECT user_id FROM users WHERE user_id = ANY($1)", [users_id]);
+        if(!users_id.length) {
+          throw new Error("The array of assigned users was not found");
+        }
+        /*const checkUsersExists = await pool.query("SELECT user_id FROM users WHERE user_id = ANY($1)", [users_id]);
         const existingUsersId = checkUsersExists.rows.map(row => row.user_id);
-        const nonExistingUsers = users_id.filter(userId => !existingUsersId.includes(userId));
+        const nonExistingUsers = users_id.filter(userId => !existingUsersId.includes(userId));*/
+        const {existingUsersId, nonExistingUsers} = await checkUsersExists(pool, users_id);
         if (nonExistingUsers.length > 0) {
           throw new Error(`Users with ids ${nonExistingUsers.join(", ")} do not exist`);
         }
         for (const user_id of existingUsersId) {
           const resultProjectAssignments = await pool.query(`INSERT INTO project_assignments (project_id, user_id) 
-            VALUES ($1, $2) RERURNING project_assignment_id`, [project_id, user_id]);
+            VALUES ($1, $2) RETURNING project_assignment_id`, [project_id, user_id]);
           const notificationData = {
             data: {
               userId: user_id,
@@ -153,12 +173,37 @@ export const ProjectsModel = {
           }
         }
       }
+      if(data.hasOwnProperty("goals")) {
+        const project_id = resultCreateProject.rows[0].project_id;
+        const goals = data.goals;
+        if(!Array.isArray(goals)) {
+          throw new Error("The data goal is not array objects");
+        }
+        for (let goal of goals) {
+          goal["project_id"] = project_id;
+          const optionsCreateGoals = {
+            tableName: "project_goals",
+            data: goal,
+            requiredFields: ["project_id", "goal_name", "target_date", "goal_status"],
+            returningColumns: ["project_goal_id"]
+          }
+          const sql = await insertDataInTable(optionsCreateGoals);
+          if (sql.type == "Error") {
+            throw new Error(sql.message);
+          }
+          const resultGoals = await pool.query(sql.message, Array.from(sql.values.values()));
+          if (!resultGoals.rows.length) {
+            throw new Error(`Error when create goal to project_goals table for ${projectId}`);
+          }
+        }
+        // TODO: Сделать отправку уведомлений при создании целей
+      }
       await pool.query("COMMIT");
-      return { type: "result", result: result.rows }
+      return { type: "result", result: resultCreateProject.rows[0] }
     } catch (error) {
       await pool.query("ROLLBACK");
       if (error instanceof Error) {
-        return { type: "errorMsg", errorMSg: error.message };
+        return { type: "errorMsg", errorMsg: error.message };
       }
       return { type: "errorMsg", errorMsg: "Error in Model createProject" };
     }
@@ -170,7 +215,7 @@ export const ProjectsModel = {
         throw new Error("Project data is required");
       }
       const options = {
-        tableName: "project",
+        tableName: "projects",
         data: data.project,
         whereClause: { "project_id": projectId },
         requiredFields: ["project_name", "status", "author_id"],
@@ -219,6 +264,9 @@ export const ProjectsModel = {
         if (Array.isArray(data.goals)) {
           const getUsersProject = await pool.query(`SELECT user_id FROM projects WHERE project_id = $1`, [projectId]);
           const usersId = getUsersProject.rows.map(row => row.user_id);
+          if(Array.isArray(data.goals)) {
+            throw new Error("The goal data is not array objects");
+          }
           for (let goal in data.goals) {
             const optionsUpdateGoals = {
               tableName: "project_goals",
@@ -233,7 +281,7 @@ export const ProjectsModel = {
             }
             const resultGoals = await pool.query(sql.message, Array.from(sql.values.values()));
             if (!resultGoals.rows.length) {
-              throw new Error(`Error when update goals to project_goals table for ${projectId}`);
+              throw new Error(`Error when update goal to project_goals table for ${projectId}`);
             }
           }
           for (let userId of usersId) {

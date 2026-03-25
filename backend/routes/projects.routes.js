@@ -3,10 +3,10 @@ import { authenticateToken, verifyRefreshToken } from "#root/middleware/authenti
 
 export const ProjectsRoutes = (fastify, options, done) => {
   fastify.get("/projects/:userId/list", { preHandler: authenticateToken }, ProjectsController.GetProjects);
-  fastify.get("/projects/:userId/:projectId", ProjectsController.GetProjectById);
-  fastify.post("/projects/:userId", ProjectsController.CreateProject);
-  fastify.put("/projects/:userId/:projectId", ProjectsController.UpdateProjectById);
-  fastify.delete("/projects/:userId/:projectId", ProjectsController.DeleteProjectById);
+  fastify.get("/projects/:userId/:projectId", { preHandler: authenticateToken }, ProjectsController.GetProjectById);
+  fastify.post("/projects/:userId", { preHandler: authenticateToken }, ProjectsController.CreateProject);
+  fastify.put("/projects/:userId/:projectId", { preHandler: authenticateToken }, ProjectsController.UpdateProjectById);
+  fastify.delete("/projects/:userId/:projectId", { preHandler: authenticateToken }, ProjectsController.DeleteProjectById);
 
   done();
 }

@@ -44,7 +44,7 @@ export const ProjectsController = {
       return errorReplyCodes.reply400("MISSING_REQUIRED_FIELD", "", req, rep);
     }
     try {
-      const result = await ProjectsModel.createProject(data)
+      const result = await ProjectsModel.createProject(data, userId)
       return replyResult(result, req, rep);
     } catch (error) {
       console.error("Error at create new project", error);

@@ -123,7 +123,7 @@ export const NotificationsModel = {
         throw new Error(`Failed to insert in-app notification for user ${userId}`);
       }
       await pool.query("COMMIT");
-      return result.rows[0].id;
+      return result.rows[0].notification_id;
     } catch (error) {
       await pool.query("ROLLBACK");
       if (error instanceof Error) {

@@ -30,8 +30,7 @@ const processChatMessage = async (msg) => {
 export const chatConsumer = {
   startChatConsumer: async () => {
     try {
-      const connection = await RabbitMQ_Config.connectRabbitMQ();
-      const channel = await connection.createChannel();
+      const channel = await RabbitMQ_Config.getChannel();
       await channel.assertQueue(CHAT_QUEUE, { durable: true });
       channel.consume(CHAT_QUEUE, async (msg) => {
         await processChatMessage(msg);

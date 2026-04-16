@@ -8,22 +8,12 @@ const ROUTING_KEY = 'chat.deliver';
  * @param {{ chatId: string, message: object, recipientUserIds: string[] }} payload
  */
 export const publishChatMessage = async (payload) => {
-  let channel;
   try {
-    const connection = await RabbitMQ_Config.connectRabbitMQ();
-    channel = await connection.createChannel();
+    const channel = await RabbitMQ_Config.getChannel();
     await channel.assertExchange(CHAT_EXCHANGE, 'direct', { durable: true });
     const message = Buffer.from(JSON.stringify(payload));
     channel.publish(CHAT_EXCHANGE, ROUTING_KEY, message, { persistent: true });
   } catch (error) {
     console.error('chatPublisher.publishChatMessage:', error);
-  } finally {
-    if (channel) {
-      try {
-        await channel.close();
-      } catch (e) {
-        // ignore
-      }
-    }
   }
 };

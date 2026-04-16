@@ -5,8 +5,8 @@ import { config } from "dotenv";
 config();
 
 export const createResources = async () => {
-  const connection = await RabbitMQ_Config.connectRabbitMQ();
-  const channel = await RabbitMQ_Config.createChannel();
+  await RabbitMQ_Config.connectRabbitMQ();
+  const channel = await RabbitMQ_Config.getChannel();
   try {
     for (const exchange of RabbitMQ_Settings.exchanges) {
       await channel.assertExchange(exchange.name, exchange.type, { durable: exchange.durable });

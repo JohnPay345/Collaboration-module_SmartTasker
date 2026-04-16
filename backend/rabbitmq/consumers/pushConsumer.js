@@ -5,19 +5,23 @@ import { RabbitMQ_Config } from '#rmq/rabbitmq_config.js';
 config();
 
 const pushQueue = 'notifications.push';
+let firebaseInited = false;
 
-const processPushNotification = async (msg) => {
+const processPushNotification = async (msg, channel) => {
   if (!msg) {
     console.log('No message received');
     return;
   }
   try {
-    const notificationData = JSON.parse(msg.data.toString());
-    const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+    const notificationData = JSON.parse(msg.content.toString());
+    const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT || '{}');
     console.log('Received push notification:', notificationData);
-    admin.initializeApp({
-      credential: admin.credential.cert(serviceAccount),
-    });
+    if (!firebaseInited) {
+      admin.initializeApp({
+        credential: admin.credential.cert(serviceAccount),
+      });
+      firebaseInited = true;
+    }
     const { userId, title, body, notificationId } = notificationData;
     const payload = {
       notification: {
@@ -34,7 +38,7 @@ const processPushNotification = async (msg) => {
     console.error('Error processing push notification:', error);
     if (error.code === 'messaging/invalid-registration-token' ||
       error.code === 'messaging/registration-token-not-registered') {
-      console.warn(`Token ${token} is invalid. Removing from database.`);
+      console.warn(`FCM token invalid or not registered. Removing from database.`);
       // TODO: Удаление недействительного токена из базы данных
     } else if (error.code === 'messaging/quota-exceeded') {
       console.error('FCM quota exceeded. Implement retry logic or reduce sending rate.');
@@ -42,18 +46,16 @@ const processPushNotification = async (msg) => {
       console.error('Invalid payload. Check your message format.');
     }
   } finally {
-    if (msg) {
-      channel.ack(msg);
-    }
+    if (msg) channel.ack(msg);
   }
 }
 
 export const pushConsumer = {
   startPushConsumer: async () => {
     try {
-      const channel = await RabbitMQ_Config.createChannel();
+      const channel = await RabbitMQ_Config.getChannel();
       await channel.assertQueue(pushQueue, { durable: true });
-      channel.consume(pushQueue, processPushNotification);
+      channel.consume(pushQueue, (msg) => processPushNotification(msg, channel));
       console.log('Waiting for push notifications...');
     } catch (error) {
       console.error('Error starting push consumer:', error);

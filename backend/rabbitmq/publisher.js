@@ -17,28 +17,23 @@ export const publishMessage = async (type, action, message) => {
       console.error('Failed to save in-app notification to database');
       return;
     }
-    if (webSocketService.isUserConnected(userId)) {
-      if (allowedInAppNotifications && allowedEvent) {
-        const websocketMessage = {
-          type: type,
-          action: action,
-          notification: {
-            notificationId: saveInAppNotification.notification_id,
-            title: message.data.title,
-            body: message.data.body
-          }
-        };
-        webSocketService.sendNotification(userId, websocketMessage);
-      } else {
-        console.log(`User ${userId} has disabled in-app notifications for event type ${eventType}`);
-        return;
-      }
-    } else {
-      console.log(`User ${userId} is not connected or has disabled in-app notifications`);
-      return;
+
+    // In-app (WebSocket) — не должен блокировать push, если пользователь оффлайн
+    if (webSocketService.isUserConnected(userId) && allowedInAppNotifications && allowedEvent) {
+      const websocketMessage = {
+        type: type,
+        action: action,
+        notification: {
+          notificationId: saveInAppNotification.notification_id,
+          title: message.data.title,
+          body: message.data.body
+        }
+      };
+      webSocketService.sendNotification(userId, websocketMessage);
     }
+
     if (allowedPushNotifications && allowedEvent) {
-      const channel = RabbitMQ_Config.chanel;
+      const channel = await RabbitMQ_Config.getChannel();
       await channel.assertQueue(pushQueue, { durable: true });
       const notification = {
         type: type,
@@ -50,9 +45,8 @@ export const publishMessage = async (type, action, message) => {
       };
       channel.sendToQueue(pushQueue, Buffer.from(JSON.stringify(notification)));
       console.log(`Sent message to ${pushQueue}:`, notification);
-      await channel.close();
     } else {
-      console.log(`User ${userId} has disabled push notifications for event type ${eventType}`);
+      console.log(`User ${userId} has disabled push notifications for event type ${action}`);
       return;
     }
   } catch (error) {
@@ -67,7 +61,7 @@ const checkSettingsNotifications = async (userId, eventType) => {
       console.error('Failed to get user notification settings:', getSettingsNotifications.errorMsg);
       return false;
     }
-    const allowedInAppNotifications = getSettingsNotifications.result.notification?.inapp;
+    const allowedInAppNotifications = getSettingsNotifications.result.notifications_settings?.inapp;
     const settingsNotifications = getSettingsNotifications.result;
     const allowedPushNotifications = getSettingsNotifications.result.notifications_settings?.push;
     let allowedEvent = false;
@@ -79,7 +73,7 @@ const checkSettingsNotifications = async (userId, eventType) => {
       console.log(`Event type ${eventType} not found in notification_settings for user ${userId}`);
       allowedEvent = false;
     }
-    return { allowedInAppNotifications, allowedEvent };
+    return { allowedInAppNotifications, allowedPushNotifications, allowedEvent };
   } catch (error) {
     console.error('Error checking settings notifications:', error);
     return false;

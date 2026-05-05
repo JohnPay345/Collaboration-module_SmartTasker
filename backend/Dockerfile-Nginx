@@ -1,0 +1,6 @@
+FROM nginx:1.30
+
+COPY ./nginx/nginx.conf /etc/nginx/nginx.conf
+
+# Создаем директории для SSL сертификатов и логов, если они не существуют
+RUN mkdir -p /etc/nginx/ssl /var/log/nginx

@@ -46,6 +46,7 @@ export const MainColors = {
   "pixel_white": "#dbdbdb",
   "black": "#000000",
   "white": "#ffffff",
+  "scarlet": "#f61b1b"
 }
 
 export const TextColors = {

@@ -1,54 +1,85 @@
 import { config } from 'dotenv';
 import admin from 'firebase-admin';
 import { RabbitMQ_Config } from '#rmq/rabbitmq_config.js';
+import { NotificationsModel } from '#root/models/notifications.models.js';
+import pushSmartTasker from '#root/push-smarttasker.json' with { type: 'json' };
 
 config();
 
 const pushQueue = 'notifications.push';
 let firebaseInited = false;
 
+function initFirebase() {
+  if (firebaseInited) return;
+  const serviceAccount = typeof pushSmartTasker === 'string'
+    ? JSON.parse(pushSmartTasker)
+    : pushSmartTasker;
+  admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount),
+  });
+  firebaseInited = true;
+}
+
 const processPushNotification = async (msg, channel) => {
-  if (!msg) {
-    console.log('No message received');
-    return;
-  }
+  if (!msg) return;
   try {
     const notificationData = JSON.parse(msg.content.toString());
-    const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT || '{}');
-    console.log('Received push notification:', notificationData);
-    if (!firebaseInited) {
-      admin.initializeApp({
-        credential: admin.credential.cert(serviceAccount),
-      });
-      firebaseInited = true;
+    const { userId, title, body, notificationId, data = {} } = notificationData;
+
+    if (!userId || !title) {
+      console.warn('pushConsumer: missing userId or title, skipping');
+      channel.ack(msg);
+      return;
     }
-    const { userId, title, body, notificationId } = notificationData;
-    const payload = {
+
+    const tokenResult = await NotificationsModel.getTokenDevice(userId);
+    if (tokenResult.type === 'errorMsg' || !tokenResult.result?.device_token) {
+      console.warn(`pushConsumer: no FCM token for user ${userId}`);
+      channel.ack(msg);
+      return;
+    }
+    const fcmToken = tokenResult.result.device_token;
+
+    initFirebase();
+
+    const message = {
+      token: fcmToken,
       notification: {
-        title: title,
-        body: body,
+        title,
+        body: body ?? '',
       },
       data: {
-        notificationId: notificationId.toString(),
+        notificationId: String(notificationId ?? ''),
+        ...Object.fromEntries(
+          Object.entries(data).map(([k, v]) => [k, String(v)])
+        ),
+      },
+      android: {
+        priority: 'high',
+        notification: { sound: 'default' },
+      },
+      apns: {
+        payload: {
+          aps: { sound: 'default' },
+        },
       },
     };
-    const response = await admin.messaging().send(userId, payload);
-    console.log('Successfully sent message:', response);
+
+    const response = await admin.messaging().send(message);
+    console.log(`FCM sent to ${userId}:`, response);
   } catch (error) {
-    console.error('Error processing push notification:', error);
-    if (error.code === 'messaging/invalid-registration-token' ||
-      error.code === 'messaging/registration-token-not-registered') {
-      console.warn(`FCM token invalid or not registered. Removing from database.`);
-      // TODO: Удаление недействительного токена из базы данных
-    } else if (error.code === 'messaging/quota-exceeded') {
-      console.error('FCM quota exceeded. Implement retry logic or reduce sending rate.');
-    } else if (error.code === 'messaging/invalid-payload') {
-      console.error('Invalid payload. Check your message format.');
+    console.error('pushConsumer error:', error);
+    if (
+      error.code === 'messaging/invalid-registration-token' ||
+      error.code === 'messaging/registration-token-not-registered'
+    ) {
+      console.warn('FCM token invalid — consider removing from DB');
+      // TODO: удалить устаревший токен из user_devices
     }
   } finally {
-    if (msg) channel.ack(msg);
+    channel.ack(msg);
   }
-}
+};
 
 export const pushConsumer = {
   startPushConsumer: async () => {
@@ -56,9 +87,9 @@ export const pushConsumer = {
       const channel = await RabbitMQ_Config.getChannel();
       await channel.assertQueue(pushQueue, { durable: true });
       channel.consume(pushQueue, (msg) => processPushNotification(msg, channel));
-      console.log('Waiting for push notifications...');
+      console.log('pushConsumer: waiting for push notifications...');
     } catch (error) {
-      console.error('Error starting push consumer:', error);
+      console.error('pushConsumer start error:', error);
     }
   },
 };

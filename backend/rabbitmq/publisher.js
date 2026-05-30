@@ -18,16 +18,22 @@ export const publishMessage = async (type, action, message) => {
       return;
     }
 
+    const notificationId = saveInAppNotification?.notification_id ?? saveInAppNotification ?? null;
+
     // In-app (WebSocket) — не должен блокировать push, если пользователь оффлайн
     if (webSocketService.isUserConnected(userId) && allowedInAppNotifications && allowedEvent) {
       const websocketMessage = {
         type: type,
         action: action,
         notification: {
-          notificationId: saveInAppNotification.notification_id,
+          notification_id: notificationId,
           title: message.data.title,
-          body: message.data.body
-        }
+          body: message.data.body,
+          notification_type: message.data.eventType,
+          notification_data: message.data.data ?? {},
+          is_read: false,
+          created_at: new Date().toISOString(),
+        },
       };
       webSocketService.sendNotification(userId, websocketMessage);
     }
@@ -35,19 +41,17 @@ export const publishMessage = async (type, action, message) => {
     if (allowedPushNotifications && allowedEvent) {
       const channel = await RabbitMQ_Config.getChannel();
       await channel.assertQueue(pushQueue, { durable: true });
-      const notification = {
-        type: type,
-        action: action,
-        userId: userId,
+      const pushPayload = {
+        userId,
         title: message.data.title,
         body: message.data.body,
-        notificationId: saveInAppNotification.notification_id
+        notificationId,
+        data: message.data.data ?? {},
       };
-      channel.sendToQueue(pushQueue, Buffer.from(JSON.stringify(notification)));
-      console.log(`Sent message to ${pushQueue}:`, notification);
+      channel.sendToQueue(pushQueue, Buffer.from(JSON.stringify(pushPayload)));
+      console.log(`Sent push to queue for ${userId}`);
     } else {
-      console.log(`User ${userId} has disabled push notifications for event type ${action}`);
-      return;
+      console.log(`User ${userId} push disabled for event ${action}`);
     }
   } catch (error) {
     console.error('Error publishing message:', error);

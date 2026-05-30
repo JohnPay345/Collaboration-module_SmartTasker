@@ -22,7 +22,7 @@ api.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    if (error.response?.status == 403) {
       originalRequest._retry = true;
       try {
         const token = await getToken();
@@ -31,11 +31,10 @@ api.interceptors.response.use(
         const payload = JSON.parse(atob(token.split('.')[1]));
         const userId = payload.userId;
 
-        const { data } = await api.get(`/updateTokens/${userId}`);
-        if (data.result) {
-          await setToken(data.result);
-
-          originalRequest.headers.Authorization = `Bearer ${data.result}`;
+        const { data } = await api.get(`/api/updateTokens/${userId}`);
+        if (data?.message?.access_token) {
+          await setToken(data.message.access_token);
+          originalRequest.headers.Authorization = `Bearer ${data.message.access_token}`;
           return api(originalRequest);
         }
       } catch (refreshError) {

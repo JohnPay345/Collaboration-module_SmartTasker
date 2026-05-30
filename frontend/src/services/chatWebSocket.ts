@@ -1,4 +1,3 @@
-import { Subject, Observable, filter, map } from 'rxjs';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { BASE_URL } from '@/constants';
 
@@ -24,7 +23,34 @@ const WS_BASE = BASE_URL.replace(/^http/, 'ws');
 const USER_DATA_KEY = 'user_data';
 
 let ws: WebSocket | null = null;
-const messageSubject = new Subject<IncomingWSMessage>();
+const chatSubscribers = new Map<string, Set<(msg: ChatMessagePayload) => void>>();
+
+function notifyChatSubscribers(chatId: string, message: ChatMessagePayload) {
+  const set = chatSubscribers.get(chatId);
+  if (!set) return;
+  set.forEach((fn) => {
+    try {
+      fn(message);
+    } catch (e) {
+      console.error('chat subscriber error', e);
+    }
+  });
+}
+
+/** Подписка на новые сообщения чата (без RxJS). Возвращает функцию отписки. */
+export function subscribeChatMessages(
+  chatId: string,
+  handler: (msg: ChatMessagePayload) => void
+): () => void {
+  if (!chatSubscribers.has(chatId)) chatSubscribers.set(chatId, new Set());
+  chatSubscribers.get(chatId)!.add(handler);
+  return () => {
+    const set = chatSubscribers.get(chatId);
+    if (!set) return;
+    set.delete(handler);
+    if (set.size === 0) chatSubscribers.delete(chatId);
+  };
+}
 
 // Получить текущий user_id из AsyncStorage (сохранён при логине)
 export async function getCurrentUserId(): Promise<string | null> {
@@ -36,22 +62,6 @@ export async function getCurrentUserId(): Promise<string | null> {
   } catch {
     return null;
   }
-}
-
-// Поток входящих сообщений с сервера (все типы: chat, notifications и т.д.)
-export function getWebSocketMessages(): Observable<IncomingWSMessage> {
-  return messageSubject.asObservable();
-}
-
-// Только сообщения чата по конкретному chatId (для подписки в экране чата)
-export function getChatMessagesStream(chatId: string): Observable<ChatMessagePayload> {
-  return messageSubject.pipe(
-    filter(
-      (msg): msg is IncomingWSMessage & { message: ChatMessagePayload } =>
-        msg.type === 'chat' && msg.action === 'new_message' && msg.chatId === chatId && !!msg.message
-    ),
-    map((msg) => msg.message)
-  );
 }
 
 // Подключиться к WebSocket после логина (вызывать при наличии userId)
@@ -66,7 +76,14 @@ export function connectChatWebSocket(userId: string): void {
     ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data as string) as IncomingWSMessage;
-        messageSubject.next(data);
+        if (
+          data.type === 'chat' &&
+          data.action === 'new_message' &&
+          data.chatId &&
+          data.message
+        ) {
+          notifyChatSubscribers(data.chatId, data.message);
+        }
       } catch {
         // ignore non-JSON
       }

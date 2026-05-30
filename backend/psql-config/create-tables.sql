@@ -2,7 +2,7 @@
 CREATE DATABASE "smartTasker" ENCODING UTF8;
 
 -- Создание специального пользователя для работы с таблицами в БД
-CREATE USER "worker1" WITH PASSWORD 's@ic5lyIK$tM';
+CREATE USER "worker1" WITH PASSWORD 's@ic5lyIK#tM';
 
 \c "smartTasker" "ST_c&Rsov@aya789";
 
@@ -167,6 +167,7 @@ CREATE TABLE IF NOT EXISTS projects (
   status project_status_type NOT NULL, -- Используем ENUM для статуса проекта
   author_id UUID REFERENCES users (user_id) NOT NULL, -- UUID в ссылке на users
   tags TEXT[],
+  yjs_state BYTEA,
   created_at TIMESTAMP WITH TIME ZONE,
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -208,6 +209,7 @@ CREATE TABLE IF NOT EXISTS tasks (
   qualification_assessment INT NOT NULL, -- Оценка квалификации
   load_assessment INT NOT NULL, -- Оценка нагрузки
   required_skills TEXT[], -- Массив навыков для задач
+  yjs_state BYTEA,
   created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(), -- Дата создания задачи
   updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW() -- Дата обновления задачи
 );

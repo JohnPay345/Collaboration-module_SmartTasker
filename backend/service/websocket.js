@@ -1,6 +1,7 @@
 import { WebSocketServer } from 'ws';
 import { WebSocket } from 'ws';
-// TODO: Разобраться с websocket подключением
+import { handleYjsConnection } from '#root/service/yjsCollabRooms.js';
+
 export const webSocketService = {
   wss: null,
   connectedUsers: new Map(),
@@ -14,6 +15,19 @@ export const webSocketService = {
 
     webSocketService.wss.on('connection', (ws, req) => {
       const pathname = (req.url || '').split('?')[0];
+
+      if (pathname.startsWith('/ws/yjs/')) {
+        handleYjsConnection(ws, req).catch((err) => {
+          console.error('Yjs websocket handler error:', err);
+          try {
+            ws.close();
+          } catch {
+            /* ignore */
+          }
+        });
+        return;
+      }
+
       const segments = pathname.split('/').filter(Boolean);
       const userId = segments.length >= 2 ? segments[1] : null;
 

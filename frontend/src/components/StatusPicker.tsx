@@ -1,7 +1,8 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { MainColors, TextColors } from '@/constants';
+import { GetProjectStatusColor, MainColors, TextColors } from '@/constants';
 import { ProjectStatus } from '@src/types/statuses';
+import { backgroundColor } from 'react-native-calendars/src/style'
 
 interface StatusPickerProps {
   value: ProjectStatus;
@@ -13,7 +14,6 @@ interface StatusPickerProps {
 const statuses: ProjectStatus[] = [
   'В работе',
   'Выполнена',
-  'Сдана',
   'Провален',
   'Неактуально',
   'Приостановлен',
@@ -26,6 +26,16 @@ export const StatusPicker: React.FC<StatusPickerProps> = ({
   disabled = false,
   error,
 }) => {
+  // TODO: Можно выделить отдельно для переиспользования
+  const getStatusColorText = (status: string) => {
+    if (status === 'Выполнена'
+      || status === 'В работе'
+    ) {
+      return TextColors.dire_wolf;
+    }
+    return TextColors.snowbank;
+  }
+
   return (
     <View style={styles.container}>
       <View style={styles.options}>
@@ -34,7 +44,9 @@ export const StatusPicker: React.FC<StatusPickerProps> = ({
             key={status}
             style={[
               styles.option,
-              value === status && styles.selectedOption,
+              value == status ? {backgroundColor: GetProjectStatusColor[status],
+                  borderColor: GetProjectStatusColor[status]} :
+                {borderColor: GetProjectStatusColor[status]},
               disabled && styles.disabled,
             ]}
             onPress={() => !disabled && onChange(status)}
@@ -42,8 +54,7 @@ export const StatusPicker: React.FC<StatusPickerProps> = ({
           >
             <Text
               style={[
-                styles.optionText,
-                value === status && styles.selectedOptionText,
+                value == status && {color: getStatusColorText(status)},
                 disabled && styles.disabledText,
               ]}
             >
@@ -71,7 +82,6 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: MainColors.pool_water,
     backgroundColor: MainColors.white,
   },
   selectedOption: {

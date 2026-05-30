@@ -48,7 +48,8 @@ export const ProjectItem: React.FC<ProjectItemProps> = ({
   };
 
   const getTextColor = (status: ProjectStatus) => {
-    if (status === 'Выполнена' || status === 'Сдана' || status === 'В работе') {
+    if (status === 'Выполнена' || status === 'Сдана' || status === 'В работе'
+    || status === 'Черновик') {
       return TextColors.dire_wolf;
     }
     return TextColors.snowbank;

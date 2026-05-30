@@ -4,33 +4,40 @@ import { Ionicons } from '@expo/vector-icons'
 import { MainColors, TextColors } from '@/constants'
 import React, { useState } from 'react'
 import { BurgerMenu } from '@src/components/BurgerMenu'
+import { MenuCreate } from '@src/components/MenuCreate'
 
 export const Footer = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isCreateMenu, setIsCreateMenu] = useState(false);
 
   return (
     <>
-      <View style={styles.bottomNav}>
-        <TouchableOpacity
-          style={styles.menuButton}
-          onPress={() => setIsMenuOpen(true)}
-        >
-          <Ionicons name="menu" size={35} color={MainColors.pool_water} />
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.addButton}
-          onPress={() => router.push(`/(tasks)/create`)}
-        >
-          <Ionicons name="add" size={35} color={MainColors.pool_water} />
-        </TouchableOpacity>
+      <View style={styles.container}>
+        {isCreateMenu && <MenuCreate isOpen={isMenuOpen}/>}
+        <View style={styles.bottomNav}>
+          <TouchableOpacity
+            style={styles.menuButton}
+            onPress={() => setIsMenuOpen(true)}
+          >
+            <Ionicons name="menu" size={35} color={MainColors.pool_water}/>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.addButton}
+            onPress={() => setIsCreateMenu(!isCreateMenu)}
+          >
+            <Ionicons name="add" size={35} color={MainColors.pool_water}/>
+          </TouchableOpacity>
+        </View>
       </View>
-
-      <BurgerMenu isOpen={isMenuOpen} onClose={() => setIsMenuOpen(false)} />
+      <BurgerMenu isOpen={isMenuOpen} onClose={() => setIsMenuOpen(false)}/>
     </>
   )
 }
 
 const styles = StyleSheet.create({
+  container: {
+
+  },
   bottomNav: {
     width: '100%',
     flexDirection: 'row',

@@ -17,13 +17,13 @@ export const HeaderEditor = ({ title, onBack, onSave }: HeaderEditorProps) => {
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{title}</Text>
       </View>
-      {onSave ? (
+      {onSave && (
         <View style={styles.headerActions}>
           <TouchableOpacity onPress={onSave}>
             <Ionicons name="checkmark" size={35} color={MainColors.pool_water} />
           </TouchableOpacity>
         </View>
-      ) : null}
+      )}
     </View>
   )
 }

@@ -25,9 +25,9 @@ export const TaskItem: React.FC<TaskItemProps> = ({
   const getStatusColor = (status: TaskStatus) => {
     switch (status) {
       case 'В работе':
-        return ColorStatusTasks.snowbank;
-      case 'Выполнена':
         return ColorStatusTasks.herbery_honey;
+      case 'Выполнена':
+        return ColorStatusTasks.flickery_crt_green;
       case 'Сдана':
         return ColorStatusTasks.vivid_blue;
       case 'Провален':

@@ -7,34 +7,40 @@ import { BurgerMenu } from '@src/components/BurgerMenu'
 
 interface Header {
   titleScreen: string;
+  isInbox?: boolean;
+  isSearch?: boolean;
 }
 
-export const Header: React.FC<Header> = ({titleScreen = 'Шаблон экрана'}) => {
+export const Header: React.FC<Header> = ({titleScreen = 'Шаблон экрана', isInbox = true, isSearch = true}) => {
   const [searchQuery, setSearchQuery] = useState('');
 
   return (
     <>
       <View style={styles.header}>
-      <Text style={styles.headerTitle}>{titleScreen}</Text>
-      <TouchableOpacity onPress={() => router.push("/inbox")}>
-        <Ionicons name="notifications-outline" size={30} color={TextColors.pool_water} />
-      </TouchableOpacity>
-    </View>
-
-      <View style={styles.searchContainer}>
-        <View style={styles.searchInputContainer}>
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Поиск"
-            placeholderTextColor="#868686"
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-          />
-        </View>
-        <TouchableOpacity style={styles.filterButton}>
-          <Ionicons name="options" size={30} color={TextColors.pool_water} />
-        </TouchableOpacity>
+        <Text style={styles.headerTitle}>{titleScreen}</Text>
+        {isInbox && (
+          <TouchableOpacity onPress={() => router.push("/inbox")}>
+            <Ionicons name="notifications-outline" size={30} color={TextColors.pool_water} />
+          </TouchableOpacity>
+        )}
       </View>
+
+      {isSearch && (
+        <View style={styles.searchContainer}>
+          <View style={styles.searchInputContainer}>
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Поиск"
+              placeholderTextColor="#868686"
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+            />
+          </View>
+          <TouchableOpacity style={styles.filterButton} onPress={() => router.push(`/filter`)}>
+            <Ionicons name="options" size={30} color={TextColors.pool_water} />
+          </TouchableOpacity>
+        </View>
+      )}
     </>
   )
 }

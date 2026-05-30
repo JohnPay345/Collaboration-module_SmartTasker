@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { TouchableOpacity, StyleSheet, Animated } from 'react-native';
 import { MainColors, TextColors } from '@/constants';
 
@@ -13,9 +13,9 @@ export const Switch: React.FC<SwitchProps> = ({
   onValueChange,
   disabled = false,
 }) => {
-  const translateX = React.useRef(new Animated.Value(value ? 1 : 0)).current;
+  const translateX = useRef(new Animated.Value(value ? 1 : 0)).current;
 
-  React.useEffect(() => {
+  useEffect(() => {
     Animated.spring(translateX, {
       toValue: value ? 1 : 0,
       useNativeDriver: true,

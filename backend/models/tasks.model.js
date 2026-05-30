@@ -12,7 +12,7 @@ export const TasksModel = {
         table: [
           ["tasks", "t"]
         ],
-        columns: ["t.task_id", "t.task_name", "t.author_id", "CONCAT(u.first_name, ' ', u.middle_name, ' ', u.last_name) AS author_name", "t.project_id",
+        columns: ["t.task_id", "t.task_name", "t.description", "t.author_id", "CONCAT(u.first_name, ' ', u.middle_name, ' ', u.last_name) AS author_name", "t.project_id",
           "t.start_date", "t.end_date", "t.status", "t.is_urgent", "t.priority",
           "t.value", "t.effort", "t.estimated_duration", "t.priority_assessment",
           "t.qualification_assessment", "t.load_assessment", "t.required_skills",
@@ -29,7 +29,6 @@ export const TasksModel = {
         return { type: "errorMsg", errorMsg: sql.message };
       }
       const result = await pool.query(sql.message, sql.values);
-      console.log(result.rows);
       if (!result.rows.length) {
         return { type: "errorMsg", errorMsg: "List task not found" };
       }
@@ -40,39 +39,23 @@ export const TasksModel = {
   },
   getTaskById: async (taskId) => {
     try {
-      const options = {
-        table: [
-          ["tasks", "t"],
-        ],
-        columns: ["t.task_id", "t.task_name", "t.description", "t.author_id", "t.project_id", "t.goal_id",
-          "t.start_date", "t.end_date", "t.status", "t.is_urgent", "t.priority", "t.value", "t.effort",
-          "t.estimated_duration", "t.priority_assessment", "t.qualification_assessment",
-          "t.load_assessment", "t.required_skills", "t.created_at", "t.updated_at", 
-          "ta.user_id", "ta.is_completed", "tc.comment_id", "tc.comment_text", "tc.created_at",
-          "tc.updated_at", "tc.is_edited"],
-        join: [
-          {
-            table: [["task_assignments", "ta"]],
-            type: "LEFT JOIN",
-            on: "t.task_id = ta.task_id"
-          },
-          {
-            table: [["task_comments", "tc"]],
-            type: "LEFT JOIN",
-            on: "t.task_id = tc.task_id"
-          }
-        ],
-        where: { "t.task_id": taskId }
-      }
-      const sql = await selectDataInTable(options);
-      if (sql.type == "Error") {
-        return { type: "errorMsg", errorMsg: sql.message };
-      }
-      const result = await pool.query(sql.message, sql.values);
-      if (!result.rows.length) {
+      const main = await pool.query(
+        `SELECT t.*, CONCAT(u.first_name, ' ', u.middle_name, ' ', COALESCE(u.last_name, '')) AS author_name
+         FROM tasks t
+         LEFT JOIN users u ON t.author_id = u.user_id
+         WHERE t.task_id = $1`,
+        [taskId]
+      );
+      if (!main.rows.length) {
         return { type: "errorMsg", errorMsg: "Task not found" };
       }
-      return { type: "result", result: result.rows[0] };
+      const assignRes = await pool.query(
+        `SELECT user_id FROM task_assignments WHERE task_id = $1 ORDER BY assigned_at`,
+        [taskId]
+      );
+      const row = main.rows[0];
+      row.assignment_user_ids = assignRes.rows.map((r) => r.user_id);
+      return { type: "result", result: row };
     } catch (error) {
       return { type: "errorMsg", errorMsg: "Error in Model getTaskById" };
     }
@@ -99,12 +82,9 @@ export const TasksModel = {
       if (!resultCreateTask.rows.length) {
         throw new Error("The task has not been created");
       }
-      if (data.hasOwnProperty("assignments")) {
+      if (data.hasOwnProperty("assignments") && Array.isArray(data.assignments) && data.assignments.length) {
         const task_id = resultCreateTask.rows[0].task_id;
         const users_id = data.assignments;
-        if(!users_id.length) {
-          throw new Error("The array of assigned users was not found");
-        }
         const checkUsersExists = await pool.query("SELECT user_id FROM users WHERE user_id = ANY($1)", [users_id]);
         const existingUsersId = checkUsersExists.rows.map(row => row.user_id);
         const nonExistingUsers = users_id.filter(userId => !existingUsersId.includes(userId));
@@ -179,56 +159,40 @@ export const TasksModel = {
       if (!resultUpdateTask.rows.length) {
         throw new Error("The task data has not been updated");
       }
-      if (data.hasOwnProperty("assignments")) {
+      if (data.hasOwnProperty("assignments") && Array.isArray(data.assignments)) {
         const task_id = resultUpdateTask.rows[0].task_id;
         const users_id = data.assignments;
-        if(!users_id.length) {
-          throw new Error("The array of assigned users was not found");
-        }
-        const checkUsersExists = await pool.query("SELECT user_id FROM users WHERE user_id = ANY($1)", [users_id]);
-        const checkUsersAssignments = await pool.query("SELECT user_id FROM task_assignments WHERE user_id = ANY($1)", [users_id]);
-        const existingUsersId = checkUsersExists.rows.map(row => row.user_id);
-        const assignmentsUsersId = checkUsersAssignments.rows.map(row => row.user_id);
-        const nonExistingUsers = users_id.filter(userId => !existingUsersId.includes(userId));
-        if (nonExistingUsers.length > 0) {
-          throw new Error(`Users with id ${nonExistingUsers.join(", ")} do not exist`);
-        }
-        const oldAssignmentsUsers = users_id.filter(userId => assignmentsUsersId.includes(userId));
-        const newAssignmentsUsers = users_id.filter(userId => !assignmentsUsersId.includes(userId));
-        for (const user_id of oldAssignmentsUsers) {
-          const notificationData = {
-            data: {
-              userId: user_id,
-              eventType: "task.updated",
-              title: "Обновление задачи",
-              body: "Обновлены данные задачи",
-              data: {
-                task_id: task_id,
-                task_name: data.task.task_name,
-              }
-            }
+        await pool.query(`DELETE FROM task_assignments WHERE task_id = $1`, [task_id]);
+        if (users_id.length) {
+          const checkUsersExists = await pool.query("SELECT user_id FROM users WHERE user_id = ANY($1)", [users_id]);
+          const existingUsersId = checkUsersExists.rows.map((row) => row.user_id);
+          const nonExistingUsers = users_id.filter((userId) => !existingUsersId.includes(userId));
+          if (nonExistingUsers.length > 0) {
+            throw new Error(`Users with id ${nonExistingUsers.join(", ")} do not exist`);
           }
-          publishMessage("task", "task.updated", notificationData);
-        }
-        for (const user_id of newAssignmentsUsers) {
-          const resultTaskAssignments = await pool.query(`INSERT INTO task_assignments (task_id, user_id, assigned_at, is_completed) \
-          VALUES ($1, $2, DEFAULT, DEFAULT) RERURNING task_assignment_id`, [task_id, user_id]);
-          const notificationData = {
-            data: {
-              userId: user_id,
-              eventType: "task.assigned",
-              title: "Новая задача",
-              body: "Поручено новая задача",
+          for (const user_id of existingUsersId) {
+            const resultTaskAssignments = await pool.query(
+              `INSERT INTO task_assignments (task_id, user_id, assigned_at, is_completed)
+               VALUES ($1, $2, DEFAULT, DEFAULT) RETURNING task_assignment_id`,
+              [task_id, user_id]
+            );
+            const notificationData = {
               data: {
-                task_id: task_id,
-                task_name: data.task.task_name,
-              }
+                userId: user_id,
+                eventType: "task.assigned",
+                title: "Новая задача",
+                body: "Поручено новая задача",
+                data: {
+                  task_id: task_id,
+                  task_name: data.task.task_name,
+                },
+              },
+            };
+            publishMessage("task", "task.assigned", notificationData);
+            if (!resultTaskAssignments.rows.length) {
+              console.error("Error when insert data to task_assignment_id table", resultTaskAssignments);
+              throw new Error("Error when insert data to task_assignment_id table");
             }
-          }
-          publishMessage("task", "task.assigned", notificationData);
-          if (!resultTaskAssignments.rows.length) {
-            console.error("Error when insert data to task_assignment_id table", resultTaskAssignments);
-            throw new Error("Error when insert data to task_assignment_id table");
           }
         }
       }

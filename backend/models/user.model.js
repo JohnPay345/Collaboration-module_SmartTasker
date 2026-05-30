@@ -114,7 +114,7 @@ export const UserModel = {
       (SELECT COALESCE(
         jsonb_agg(
           jsonb_build_object(
-            'id', uc.user_id,
+            'user_id', uc.user_id,
             'first_name', uc.first_name,
             'middle_name', uc.middle_name,
             'last_name', uc.last_name,
@@ -216,7 +216,6 @@ export const UserModel = {
     }
     try {
       const { user_id, fullname: fullName } = result.rows[0];
-      console.log(result.rows[0])
       const tokens = generateTokens({ userId: user_id, fullName });
       return { type: "result", result: { user_id: id, tokens } }
     } catch (error) {

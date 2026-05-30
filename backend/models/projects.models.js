@@ -6,6 +6,22 @@ import { publishMessage } from "#rmq/publisher.js";
 
 config();
 
+const PROJECT_DATA_COLUMNS = [
+  "project_name",
+  "description",
+  "status",
+  "author_id",
+  "start_date",
+  "end_date",
+  "tags",
+];
+
+function pickProjectFields(project) {
+  return Object.fromEntries(
+    Object.entries(project).filter(([key]) => PROJECT_DATA_COLUMNS.includes(key))
+  );
+}
+
 export const ProjectsModel = {
   getProjects: async (userId) => {
     try {
@@ -15,7 +31,6 @@ export const ProjectsModel = {
         where: { "author_id": userId }
       }
       const sql = await selectDataInTable(getProjectOptions);
-      console.log(sql.message)
       if (sql.type == "Error") {
         return { type: "errorMsg", errorMsg: sql.message };
       }
@@ -123,11 +138,14 @@ export const ProjectsModel = {
       if(!data.hasOwnProperty("project")) {
         throw new Error("Project data is required");
       }
+      const projectRow = pickProjectFields(data.project);
+      if (!projectRow.author_id) {
+        projectRow.author_id = userId;
+      }
       const options = {
         tableName: "projects",
-        data: data.project,
-        columns: ["project_name", "description", "status", "author_id"],
-        where: { "author_id": userId },
+        data: projectRow,
+        requiredFields: ["project_name", "status", "author_id"],
         returningColumns: ["project_id"]
       }
       const sql = await insertDataInTable(options);
@@ -138,16 +156,10 @@ export const ProjectsModel = {
       if (!resultCreateProject.rows.length) {
         throw new Error("The project has not been created");
       }
-      if (data.hasOwnProperty("assignments")) {
+      if (data.hasOwnProperty("assignments") && Array.isArray(data.assignments) && data.assignments.length) {
         const project_id = resultCreateProject.rows[0].project_id;
         const users_id = data.assignments;
-        if(!users_id.length) {
-          throw new Error("The array of assigned users was not found");
-        }
-        /*const checkUsersExists = await pool.query("SELECT user_id FROM users WHERE user_id = ANY($1)", [users_id]);
-        const existingUsersId = checkUsersExists.rows.map(row => row.user_id);
-        const nonExistingUsers = users_id.filter(userId => !existingUsersId.includes(userId));*/
-        const {existingUsersId, nonExistingUsers} = await checkUsersExists(pool, users_id);
+        const { existingUsersId, nonExistingUsers } = await checkUserExist(pool, users_id);
         if (nonExistingUsers.length > 0) {
           throw new Error(`Users with ids ${nonExistingUsers.join(", ")} do not exist`);
         }
@@ -216,7 +228,7 @@ export const ProjectsModel = {
       }
       const options = {
         tableName: "projects",
-        data: data.project,
+        data: pickProjectFields(data.project),
         whereClause: { "project_id": projectId },
         requiredFields: ["project_name", "status", "author_id"],
         returningColumns: ["project_id"]
@@ -229,34 +241,37 @@ export const ProjectsModel = {
       if (!resultUpdateProject.rows.length) {
         throw new Error("The project has not been updated");
       }
-      if (data.hasOwnProperty("assignments")) {
-        const project_id = resultCreateProject.rows[0].project_id;
+      if (data.hasOwnProperty("assignments") && Array.isArray(data.assignments)) {
         const users_id = data.assignments;
-        const checkUsersExists = await pool.query("SELECT user_id FROM users WHERE user_id = ANY($1)", [users_id]);
-        const existingUsersId = checkUsersExists.rows.map(row => row.user_id);
-        const nonExistingUsers = users_id.filter(userId => !existingUsersId.includes(userId));
-        if (nonExistingUsers.length > 0) {
-          throw new Error(`Users with ids ${nonExistingUsers.join(", ")} do not exist`);
-        }
-        for (const user_id of existingUsersId) {
-          const resultProjectAssignments = await pool.query(`INSERT INTO project_assignments (project_id, user_id) 
-            VALUES ($1, $2) RERURNING project_assignment_id`, [project_id, user_id]);
-          const notificationData = {
-            data: {
-              userId: user_id,
-              eventType: "project.assigned",
-              title: "Новый проект",
-              body: "Вы вошли в состав команды проекта",
-              data: {
-                project_id: project_id,
-                project_name: data.project.project_name,
-              }
-            }
+        await pool.query(`DELETE FROM project_assignments WHERE project_id = $1`, [projectId]);
+        if (users_id.length) {
+          const { existingUsersId, nonExistingUsers } = await checkUserExist(pool, users_id);
+          if (nonExistingUsers.length > 0) {
+            throw new Error(`Users with ids ${nonExistingUsers.join(", ")} do not exist`);
           }
-          publishMessage("project", "project.assigned", notificationData);
-          if (!resultProjectAssignments.rows.length) {
-            console.error("Error when insert data to project_assignments table", resultProjectAssignments);
-            throw new Error("Error when insert data to project_assignments table");
+          for (const user_id of existingUsersId) {
+            const resultProjectAssignments = await pool.query(
+              `INSERT INTO project_assignments (project_id, user_id)
+               VALUES ($1, $2) RETURNING project_assignment_id`,
+              [projectId, user_id]
+            );
+            const notificationData = {
+              data: {
+                userId: user_id,
+                eventType: "project.assigned",
+                title: "Новый проект",
+                body: "Вы вошли в состав команды проекта",
+                data: {
+                  project_id: projectId,
+                  project_name: data.project.project_name,
+                },
+              },
+            };
+            publishMessage("project", "project.assigned", notificationData);
+            if (!resultProjectAssignments.rows.length) {
+              console.error("Error when insert data to project_assignments table", resultProjectAssignments);
+              throw new Error("Error when insert data to project_assignments table");
+            }
           }
         }
       }

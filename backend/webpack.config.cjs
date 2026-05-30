@@ -46,9 +46,9 @@ module.exports = {
   },
   plugins: [
     new Dotenv({
-      path: './.env',
+      path: `./.env.${isProduction ? "production" : "development"}`,
       safe: true,
-      systemvars: true
+      systemvars: true,
     }),
     new CopyPlugin({
       patterns: [

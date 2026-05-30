@@ -38,10 +38,7 @@ services:
     hostname: redis
     ports:
       - "6379:6379"
-    environment:
-      REDIS_PASSWORD: root_p@ss007d
-      REDIS_USER: redisuser
-      REDIS_USER_PASSWORD: redispassword
+    command: redis-server --requirepass root_p@ss007d
     volumes:
       - rs_data:/rs_data
     networks:

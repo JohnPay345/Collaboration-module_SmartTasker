@@ -4,16 +4,30 @@ import { updateDataInTable } from "#root/service/duplicatePartsCode.js";
 export const NotificationsModel = {
   registerTokens: async (userId, deviceToken, deviceType) => {
     try {
-      const result = await pool.query(
-        `INSERT INTO user_devices (user_id, device_type, device_token, created_at) VALUES ($1, $2, $3, NOW()) \
-        ON CONFLICT(user_id) DO UPDATE SET device_token = $3 RETURNING device_id`,
-        [userId, deviceType, deviceToken]
-      );
+      await pool.query("BEGIN");
+      const currentUserDevice = await pool.query(`SELECT device_id FROM user_devices WHERE user_id = $1`, [userId]);
+      let result = null;
+      console.log(currentUserDevice.rows)
+      if(!currentUserDevice.rows) {
+        result = await pool.query(
+          `INSERT INTO user_devices (user_id, device_type, device_token, created_at) VALUES ($1, $2, $3, NOW())
+          RETURNING device_id`,
+          [userId, deviceType, deviceToken]
+        );
+      } else {
+        result = await pool.query(
+          `UPDATE user_devices SET device_token = $1 WHERE device_id = $2`,
+          [deviceToken, currentUserDevice.rows[0].device_id]
+        );
+      }
+
       if (!result.rows[0].length) {
         return { type: "errorMsg", errorMsg: "Error in register tokens" };
       }
+      await pool.query("COMMIT");
       return { type: "result", result: result.rows[0] };
     } catch (error) {
+      await pool.query("ROLLBACK");
       return { type: "errorMsg", errorMsg: "Error in Model registerTokens" };
     }
   },
@@ -37,7 +51,7 @@ export const NotificationsModel = {
       const result = await pool.query(`SELECT notification_id, notification_type, notification_title,
         notification_body, notification_data, is_read, created_at FROM in_app_notifications
         WHERE user_id = $1`, [userId]);
-      if (!result.rows[0].length) {
+      if (!result.rows.length) {
         return { type: "errorMsg", errorMsg: `Notifications for user ${userId} not found` };
       }
       return { type: "result", result: result.rows };
@@ -110,10 +124,27 @@ export const NotificationsModel = {
       return { type: "errorMsg", errorMsg: "Error in Model updateSettingsNotifications" };
     }
   },
+  markNotificationRead: async (userId, notificationId) => {
+    try {
+      const result = await pool.query(
+        `UPDATE in_app_notifications SET is_read = true
+         WHERE notification_id = $1 AND user_id = $2
+         RETURNING notification_id, is_read`,
+        [notificationId, userId]
+      );
+      if (!result.rows.length) {
+        return { type: 'errorMsg', errorMsg: 'Notification not found or access denied' };
+      }
+      return { type: 'result', result: result.rows[0] };
+    } catch (error) {
+      return { type: 'errorMsg', errorMsg: 'Error in Model markNotificationRead' };
+    }
+  },
   saveInAppNotification: async (notificationData) => {
     try {
       await pool.query("BEGIN");
       const { userId, eventType, title, body, data } = notificationData;
+      console.log(userId, eventType, title, body, data)
       const result = await pool.query(
         `INSERT INTO in_app_notifications (user_id, notification_type, notification_title, notification_body, \
         notification_data, created_at) VALUES ($1, $2, $3, $4, $5, NOW()) RETURNING notification_id`,

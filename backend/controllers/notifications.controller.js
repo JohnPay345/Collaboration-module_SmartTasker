@@ -21,12 +21,12 @@ export const NotificationsController = {
   },
   GetSettingsNotifications: async (req, rep) => {
     try {
-      const { userId } = req.params;
+      const { user_id } = req.params;
       const id = req.user.userId;
-      if (id !== userId) {
-        return errorReplyCodes.reply403("DEFAULT", `There is no access for user ${userId}`, req, rep);
+      if (id !== user_id) {
+        return errorReplyCodes.reply403("DEFAULT", `There is no access for user ${user_id}`, req, rep);
       }
-      const result = await NotificationsModel.getSettingsNotifications(userId);
+      const result = await NotificationsModel.getSettingsNotifications(user_id);
       return replyResult(result, req, rep);
     } catch (error) {
       console.error("Error at get settings notifications", error);
@@ -35,12 +35,12 @@ export const NotificationsController = {
   },
   GetInAppNotifications: async (req, rep) => {
     try {
-      const { userId } = req.params;
+      const { user_id } = req.params;
       const id = req.user.userId;
-      if (id !== userId) {
-        return errorReplyCodes.reply403("DEFAULT", `There is no access for user ${userId}`, req, rep);
+      if (id !== user_id) {
+        return errorReplyCodes.reply403("DEFAULT", `There is no access for user ${user_id}`, req, rep);
       }
-      const result = await NotificationsModel.getInAppNotifications(userId);
+      const result = await NotificationsModel.getInAppNotifications(user_id);
       return replyResult(result, req, rep);
     } catch (error) {
       console.error("Error at get in_app notifications", error);
@@ -62,6 +62,20 @@ export const NotificationsController = {
     } catch (error) {
       console.error("Error at created settings notifications", error);
       return errorReplyCodes.reply500("DEFAULT", "", req, rep);
+    }
+  },
+  MarkNotificationRead: async (req, rep) => {
+    try {
+      const { userId, notificationId } = req.params;
+      const id = req.user.userId;
+      if (id !== userId) {
+        return errorReplyCodes.reply403('DEFAULT', `There is no access for user ${userId}`, req, rep);
+      }
+      const result = await NotificationsModel.markNotificationRead(userId, notificationId);
+      return replyResult(result, req, rep);
+    } catch (error) {
+      console.error('Error at mark notification read', error);
+      return errorReplyCodes.reply500('DEFAULT', '', req, rep);
     }
   },
   UpdateSettingsNotifications: async (req, rep) => {

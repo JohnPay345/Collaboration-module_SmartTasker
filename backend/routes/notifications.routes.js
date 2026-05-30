@@ -7,6 +7,7 @@ export const NotificationsRoutes = (fastify, options, done) => {
   fastify.get("/notifications/inbox/:user_id", { preHandler: authenticateToken }, NotificationsController.GetInAppNotifications);
   fastify.post("/notifications/settings/:user_id", { preHandler: authenticateToken }, NotificationsController.CreateSettingsNotifications);
   fastify.put("/notifications/settings/:user_id", { preHandler: authenticateToken }, NotificationsController.UpdateSettingsNotifications);
+  fastify.patch("/notifications/inbox/:userId/:notificationId/read", { preHandler: authenticateToken }, NotificationsController.MarkNotificationRead);
 
   done();
 }

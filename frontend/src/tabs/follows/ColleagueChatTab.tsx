@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { useGetOrCreateChat, useChatMessages, useSendMessage, type ChatMessage } from '@src/api/chat';
 import { useCurrentUserId } from '@src/hooks/useCurrentUserId';
-import { getChatMessagesStream } from '@src/services/chatWebSocket';
+import { subscribeChatMessages } from '@src/services/chatWebSocket';
 import { MainColors, TextColors } from '@/constants';
 
 interface ColleagueChatTabProps {
@@ -24,7 +24,7 @@ export const ColleagueChatTab: React.FC<ColleagueChatTabProps> = ({ peerId }) =>
   const [inputText, setInputText] = useState('');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const scrollRef = useRef<ScrollView>(null);
-
+  // TODO: Переделать под async/await для useEffect
   const { data: chatData, isLoading: chatLoading, isSuccess: chatReady } = useGetOrCreateChat(currentUserId ?? null, peerId ?? null);
   const chatId = chatData?.chat_id ?? null;
 
@@ -38,13 +38,12 @@ export const ColleagueChatTab: React.FC<ColleagueChatTabProps> = ({ peerId }) =>
 
   useEffect(() => {
     if (!chatId) return;
-    const sub = getChatMessagesStream(chatId).subscribe((newMsg) => {
+    return subscribeChatMessages(chatId, (newMsg) => {
       setMessages((prev) => {
         if (prev.some((m) => m.chat_messages_id === newMsg.chat_messages_id)) return prev;
         return [...prev, newMsg];
       });
     });
-    return () => sub.unsubscribe();
   }, [chatId]);
 
   const handleSend = async () => {
@@ -166,7 +165,7 @@ const styles = StyleSheet.create({
   },
   bubbleOwn: {
     alignSelf: 'flex-end',
-    backgroundColor: MainColors.herbery_honey,
+    backgroundColor: MainColors.pool_water,
     borderBottomRightRadius: 4,
   },
   bubblePeer: {
@@ -178,14 +177,14 @@ const styles = StyleSheet.create({
     fontSize: 15,
   },
   bubbleTextOwn: {
-    color: TextColors.lunar_base,
+    color: TextColors.white,
   },
   bubbleTextPeer: {
     color: TextColors.dire_wolf ?? '#333',
   },
   time: {
     fontSize: 11,
-    color: TextColors.lunar_base,
+    color: TextColors.white,
     marginTop: 4,
   },
   send_message: {
@@ -209,7 +208,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   send_button: {
-    backgroundColor: MainColors.herbery_honey,
+    backgroundColor: MainColors.pool_water,
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 8,
@@ -219,7 +218,7 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   send_button_text: {
-    color: TextColors.lunar_base,
+    color: TextColors.white,
     fontWeight: '600',
   },
 });

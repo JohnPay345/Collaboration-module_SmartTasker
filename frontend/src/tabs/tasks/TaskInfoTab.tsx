@@ -1,93 +1,254 @@
 import { GetTaskStatusColor, MainColors, TextColors } from "@/constants";
 import { ModalItem } from "@/src/components/ModalItem";
+import { Tags } from "@/src/components/Tags";
+import { DurationSlider } from "@/src/components/DurationSlider";
+import { DatePickerProfile } from "@/src/modals/DatePickerProfile";
 import { TaskStatus } from "@/src/types/statuses";
+import {
+  RATING_PICKER_ITEMS,
+  ratingLabel,
+  toRatingLevel,
+  type TaskRatingLevel,
+} from "@/src/utils/taskRatings";
 import { Octicons } from "@expo/vector-icons";
-import { Picker } from "@react-native-picker/picker";
 import { router } from "expo-router";
-import { useState } from "react";
+import { useEffect, useState, forwardRef, useImperativeHandle, useMemo, useCallback } from "react";
 import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import type { Task } from "@src/api/tasks";
+import { pickCell, type LwwCell } from "@src/collab/lwwMaterialize";
+import type { User } from "@src/api/users";
 
-const STATUSES: TaskStatus[] = ['Черновик', 'В работе', 'Сдана', 'Выполнена', 'Неактуально', 'Провален'];
-const PRIORITIES = ['1 - Низкий', '2 - Средний', '3 - Высокий'];
-const VALUES = ['1 - Низкая', '2 - Средняя', '3 - Высокая'];
+export type TaskInfoTabSavePayload = {
+  task: Record<string, unknown>;
+  assignmentUserIds: string[];
+};
 
-function calcPriority(value: string, effort: string): string {
-  const v = parseInt(value.split(' ')[0], 10);
-  const e = parseInt(effort.split(' ')[0], 10);
-  const score = v - e;
-  if (score >= 2) return PRIORITIES[2];
-  if (score === 1) return PRIORITIES[1];
-  return PRIORITIES[0];
+export type TaskInfoTabRef = {
+  getSavePayload: () => TaskInfoTabSavePayload;
+};
+
+function formatColleagueName(u: Pick<User, "first_name" | "middle_name" | "last_name">) {
+  return [u.first_name, u.middle_name, u.last_name].filter(Boolean).join(" ").trim();
 }
 
-export const TaskInfoTab = ({ mode }: { mode: 'create' | 'view' | 'edit' }) => {
+function formatDisplayDate(date: Date): string {
+  return date.toLocaleDateString("ru-RU");
+}
+
+function toCalendarMaxDate(): string {
+  const d = new Date();
+  d.setFullYear(d.getFullYear() + 5);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+export type TaskCollaboration = {
+  materialized: Record<string, LwwCell>;
+  pushWrite: (field: string, value: unknown) => void;
+};
+
+const STATUSES: TaskStatus[] = ["Черновик", "В работе", "Сдана", "Выполнена", "Неактуально", "Провален"];
+type RatingField = "priority" | "value" | "effort";
+
+export const TaskInfoTab = forwardRef<
+  TaskInfoTabRef,
+  {
+    mode: "create" | "view" | "edit";
+    task?: Task | null;
+    collaboration?: TaskCollaboration;
+    colleagues?: User[];
+    currentUserId: string;
+    activeEditorsByField?: Record<string, string[]>;
+  }
+>(function TaskInfoTab({ mode, task, collaboration, colleagues = [], currentUserId, activeEditorsByField }, ref) {
   const [isStatusPickerVisible, setIsStatusPickerVisible] = useState(false);
-  const isEditable = mode === 'create' || mode === 'edit';
+  const [ratingPicker, setRatingPicker] = useState<RatingField | null>(null);
+  const [showDeadlinePicker, setShowDeadlinePicker] = useState(false);
+  const isEditable = mode === "create" || mode === "edit";
+
   const [taskData, setTaskData] = useState({
-    title: '',
-    description: '',
-    author: 'Вы, Винокурин Геннадий Павлович',
-    deadline: '01.01.2000, 09:30',
-    status: 'В работе' as TaskStatus,
-    value: '3 - Высокий',
-    effort: '3 - Высокий',
-    skills: 'Администрирование ОС; Сетевые технологии; Облач...',
-    assignees: 'Иванов И.И.; Горький С.Я.;',
+    title: "",
+    description: "",
+    author: "",
+    status: "В работе" as TaskStatus,
+    priority: "3" as TaskRatingLevel,
+    value: "3" as TaskRatingLevel,
+    effort: "3" as TaskRatingLevel,
     urgent: false,
   });
 
-  const priority = calcPriority(taskData.value, taskData.effort);
+  const [endDate, setEndDate] = useState(() => new Date(Date.now() + 7 * 86400000));
+  const [estimatedDuration, setEstimatedDuration] = useState(8);
+  const [skillsList, setSkillsList] = useState<string[]>([]);
+  const [assignmentUserIds, setAssignmentUserIds] = useState<string[]>([]);
+  const [teamPickerVisible, setTeamPickerVisible] = useState(false);
 
-  const renderPicker = (value: string, items: string[], onValueChange: (value: string) => void) => (
-    <View style={styles.infoField}>
-      <Picker
-        selectedValue={value}
-        onValueChange={onValueChange}
-        enabled={isEditable}
-        style={styles.picker}
-      >
-        {items.map((item) => (
-          <Picker.Item key={item} label={item} value={item} />
-        ))}
-      </Picker>
-    </View>
-  );
+  useEffect(() => {
+    if (!task) return;
+    setTaskData((prev) => ({
+      ...prev,
+      title: task.task_name ?? prev.title,
+      description: task.description ?? prev.description,
+      author: task.author_name ? `Автор: ${task.author_name}` : prev.author,
+      status: (task.status as TaskStatus) ?? prev.status,
+      priority: toRatingLevel(task.priority, "3"),
+      value: toRatingLevel(task.value, "3"),
+      effort: toRatingLevel(task.effort, "3"),
+      urgent: !!task.is_urgent,
+    }));
+    if (task.end_date) {
+      setEndDate(new Date(task.end_date as Date));
+    }
+    if (task.estimated_duration != null) {
+      setEstimatedDuration(Math.min(40, Math.max(1, Number(task.estimated_duration) || 8)));
+    }
+    setSkillsList(Array.isArray(task.required_skills) ? task.required_skills.filter(Boolean) : []);
+    setAssignmentUserIds(task.assignment_user_ids ?? []);
+  }, [task]);
 
-  let isVisible = false;
+  const cells = collaboration?.materialized ?? {};
+  const title = pickCell(cells, "task_name", taskData.title);
+  const description = pickCell(cells, "description", taskData.description);
+  const status = pickCell(cells, "status", taskData.status) as TaskStatus;
+  const priorityLevel = toRatingLevel(pickCell(cells, "priority", taskData.priority) as string);
+  const valueLevel = toRatingLevel(pickCell(cells, "value", taskData.value) as string);
+  const effortLevel = toRatingLevel(pickCell(cells, "effort", taskData.effort) as string);
+  const urgent = pickCell(cells, "is_urgent", taskData.urgent);
 
-  const showPicker = <T extends string>(value: T, items: T[], onValueChange: (value: T) => void) => {
-    return (
-      <ModalItem
-        isVisible={true}
-        onClose={() => !isVisible}
-      >
-        <View style={styles.pickerContainer}>
-          <Picker selectedValue={value} onValueChange={onValueChange} enabled={isEditable} style={styles.picker}>
-            {items.map((item) => (
-              <Picker.Item key={item} label={item} value={item} />
-            ))}
-          </Picker>
-        </View>
-      </ModalItem>
-    );
-  };
-
-  const getStatusTextColor = (status: TaskStatus): string => {
-    if (status === 'Выполнена'
-      || status === 'В работе'
-    ) {
+  const getStatusTextColor = (s: TaskStatus): string => {
+    if (s === "Выполнена" || s === "В работе") {
       return TextColors.dire_wolf;
     }
     return TextColors.snowbank;
-  }
+  };
 
-  const getStatusColor = (status: TaskStatus): string => {
-    const color = GetTaskStatusColor[status] ? GetTaskStatusColor[status] : TextColors.dim_gray;
-    return color;
-  }
+  const getStatusColor = (s: TaskStatus): string => {
+    return GetTaskStatusColor[s] ? GetTaskStatusColor[s] : TextColors.dim_gray;
+  };
+
+  const assignmentSummary = useMemo(() => {
+    if (!assignmentUserIds.length) return "Не выбраны";
+    const names = assignmentUserIds
+      .map((id) => colleagues.find((c) => c.user_id === id))
+      .filter(Boolean)
+      .map((u) => formatColleagueName(u!));
+    return names.length ? names.join(", ") : assignmentUserIds.join(", ");
+  }, [assignmentUserIds, colleagues]);
+
+  const toggleAssignment = useCallback((uid: string) => {
+    setAssignmentUserIds((prev) => (prev.includes(uid) ? prev.filter((x) => x !== uid) : [...prev, uid]));
+  }, []);
+
+  const applyRating = (field: RatingField, level: TaskRatingLevel) => {
+    setTaskData((prev) => ({ ...prev, [field]: level }));
+    collaboration?.pushWrite(field, level);
+    setRatingPicker(null);
+  };
+
+  const handleSkillsTags = (_field: string, postTags: string) => {
+    const list = postTags
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    setSkillsList(list);
+    // Для коллаборации обновляем CRDT тем же ключом, который слушает сервер.
+    collaboration?.pushWrite("required_skills", list);
+  };
+
+  const handleDeadlineChange = (date: Date) => {
+    setEndDate(date);
+    collaboration?.pushWrite("end_date", date.toISOString().slice(0, 10));
+  };
+
+  const changeShowPicker = (picker: string, isShow: boolean) => {
+    if (picker === "Date Picker") {
+      setShowDeadlinePicker(isShow);
+    }
+  };
+
+  const renderRatingField = (field: RatingField, label: string, level: TaskRatingLevel) => (
+    <View style={[styles.section, styles.flex1]}>
+      <Text style={[styles.label, { textAlign: "center" }]}>{label}</Text>
+      {renderEditorHint(field)}
+      {isEditable ? (
+        <TouchableOpacity style={styles.infoField} onPress={() => setRatingPicker(field)}>
+          <Text style={styles.infoText}>{ratingLabel(level)}</Text>
+        </TouchableOpacity>
+      ) : (
+        <View style={styles.infoField}>
+          <Text style={styles.infoText}>{ratingLabel(level)}</Text>
+        </View>
+      )}
+    </View>
+  );
+
+  const renderEditorHint = (fieldKey: string) => {
+    const list = activeEditorsByField?.[fieldKey] ?? [];
+    if (!isEditable || list.length === 0) return null;
+    const max = 3;
+    const shown = list.slice(0, max);
+    const rest = list.length - shown.length;
+    const text =
+      shown.length === 1
+        ? `Сейчас редактирует: ${shown[0]}`
+        : rest > 0
+          ? `Сейчас редактируют: ${shown.join(", ")} и ещё ${rest}`
+          : `Сейчас редактируют: ${shown.join(", ")}`;
+    return <Text style={styles.editorHint}>{text}</Text>;
+  };
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      getSavePayload: (): TaskInfoTabSavePayload => {
+        const now = new Date();
+        const start = task?.start_date ? new Date(task.start_date as Date) : now;
+        return {
+          task: {
+            task_name: (title || "").trim() || "Без названия",
+            description: description || "",
+            author_id: task?.author_id || currentUserId,
+            start_date: start.toISOString().slice(0, 10),
+            end_date: endDate.toISOString().slice(0, 10),
+            status,
+            is_urgent: !!urgent,
+            priority: priorityLevel,
+            value: valueLevel,
+            effort: effortLevel,
+            estimated_duration: estimatedDuration,
+            priority_assessment: task?.priority_assessment ?? Number(priorityLevel),
+            qualification_assessment: task?.qualification_assessment ?? 1,
+            load_assessment: task?.load_assessment ?? 1,
+            required_skills: skillsList,
+            created_at: task?.created_at ?? now.toISOString(),
+            updated_at: now.toISOString(),
+            project_id: task?.project_id,
+            goal_id: task?.goal_id,
+          },
+          assignmentUserIds: [...assignmentUserIds],
+        };
+      },
+    }),
+    [
+      task,
+      title,
+      description,
+      status,
+      urgent,
+      priorityLevel,
+      valueLevel,
+      effortLevel,
+      endDate,
+      estimatedDuration,
+      skillsList,
+      assignmentUserIds,
+      currentUserId,
+    ]
+  );
 
   const handleDelete = () => {
-    // TODO: Удаление задачи
     router.back();
   };
 
@@ -95,20 +256,28 @@ export const TaskInfoTab = ({ mode }: { mode: 'create' | 'view' | 'edit' }) => {
     <ScrollView style={styles.content}>
       <View style={styles.section}>
         <Text style={styles.label}>Название задачи</Text>
+        {renderEditorHint("task_name")}
         <TextInput
           style={styles.input}
           placeholder="До 200 символов"
-          value={taskData.title}
-          onChangeText={(text) => setTaskData({ ...taskData, title: text })}
+          value={title}
+          onChangeText={(text) => {
+            setTaskData({ ...taskData, title: text });
+            collaboration?.pushWrite("task_name", text);
+          }}
           editable={isEditable}
           maxLength={200}
         />
+        {renderEditorHint("description")}
         <TextInput
           style={[styles.input, styles.multilineInput]}
           multiline
           placeholder="Описание задачи"
-          value={taskData.description}
-          onChangeText={(text) => setTaskData({ ...taskData, description: text })}
+          value={description}
+          onChangeText={(text) => {
+            setTaskData({ ...taskData, description: text });
+            collaboration?.pushWrite("description", text);
+          }}
           editable={isEditable}
         />
       </View>
@@ -122,111 +291,110 @@ export const TaskInfoTab = ({ mode }: { mode: 'create' | 'view' | 'edit' }) => {
 
       <View style={styles.row}>
         <View style={[styles.section, styles.flex1]}>
-          <Text style={[styles.label, { textAlign: 'center' }]}>Дедлайн</Text>
-          <View style={[styles.infoField, { borderRadius: 0, backgroundColor: 'transparent' }]}>
-            <Text style={[styles.infoText, { fontSize: 12 }]}>{taskData.deadline}</Text>
-          </View>
+          <Text style={[styles.label, { textAlign: "center" }]}>Дедлайн</Text>
+          {renderEditorHint("end_date")}
+          {isEditable ? (
+            <TouchableOpacity
+              style={styles.infoField}
+              onPress={() => setShowDeadlinePicker(true)}
+            >
+              <Text style={[styles.infoText, { fontSize: 12, textAlign: "center" }]}>
+                {formatDisplayDate(endDate)}
+              </Text>
+            </TouchableOpacity>
+          ) : (
+            <View style={[styles.infoField, { backgroundColor: "transparent" }]}>
+              <Text style={[styles.infoText, { fontSize: 12, textAlign: "center" }]}>
+                {formatDisplayDate(endDate)}
+              </Text>
+            </View>
+          )}
         </View>
 
         <View style={[styles.section, styles.flex1]}>
-          <Text style={[styles.label, { textAlign: 'center' }]}>Статус задачи</Text>
+          <Text style={[styles.label, { textAlign: "center" }]}>Статус задачи</Text>
+          {renderEditorHint("status")}
           <TouchableOpacity
-            style={[styles.statusBadge, {
-              backgroundColor: getStatusColor(taskData.status)
-            }]}
-            onPress={() => { setIsStatusPickerVisible(true) }}
+            style={[styles.statusBadge, { backgroundColor: getStatusColor(status) }]}
+            onPress={() => isEditable && setIsStatusPickerVisible(true)}
+            disabled={!isEditable}
           >
-            <Text style={[styles.statusText, { color: getStatusTextColor(taskData.status) }]}>
-              {taskData.status}
-            </Text>
+            <Text style={[styles.statusText, { color: getStatusTextColor(status) }]}>{status}</Text>
           </TouchableOpacity>
         </View>
 
         <View style={[styles.section, styles.flex1]}>
-          <Text style={[styles.label, { textAlign: 'center' }]}>{taskData.urgent ? 'Срочно' : 'Не срочно'}</Text>
-          <View style={[styles.urgencyIcon, { alignItems: 'center' }]}>
-            <Octicons name="stop" size={35} color={taskData.urgent ? TextColors.ottoman_red : TextColors.dim_gray} />
-          </View>
+          <Text style={[styles.label, { textAlign: "center" }]}>{urgent ? "Срочно" : "Не срочно"}</Text>
+          {renderEditorHint("is_urgent")}
+          <TouchableOpacity
+            style={[styles.urgencyIcon, { alignItems: "center" }]}
+            disabled={!isEditable}
+            onPress={() => {
+              const next = !Boolean(urgent);
+              setTaskData({ ...taskData, urgent: next });
+              collaboration?.pushWrite("is_urgent", next);
+            }}
+          >
+            <Octicons
+              name="stop"
+              size={35}
+              color={urgent ? TextColors.ottoman_red : TextColors.dim_gray}
+            />
+          </TouchableOpacity>
         </View>
       </View>
 
       <View style={styles.row}>
-        <View style={[styles.section, styles.flex1]}>
-          <Text style={[styles.label, { textAlign: 'center' }]}>Приоритет</Text>
-          <View style={styles.infoField}>
-            <Text style={styles.infoText}>{priority}</Text>
-          </View>
-        </View>
-
-        <View style={[styles.section, styles.flex1]}>
-          <Text style={[styles.label, { textAlign: 'center' }]}>Ценность</Text>
-          {isEditable ? (
-            renderPicker(
-              taskData.value,
-              VALUES,
-              (value) => setTaskData({ ...taskData, value })
-            )
-          ) : (
-            <View style={styles.infoField}>
-              <Text style={styles.infoText}>{taskData.value}</Text>
-            </View>
-          )}
-        </View>
-
-        <View style={[styles.section, styles.flex1]}>
-          <Text style={[styles.label, { textAlign: 'center' }]}>Усилия</Text>
-          {isEditable ? (
-            renderPicker(
-              taskData.effort,
-              VALUES,
-              (effort) => setTaskData({ ...taskData, effort })
-            )
-          ) : (
-            <View style={styles.infoField}>
-              <Text style={styles.infoText}>{taskData.effort}</Text>
-            </View>
-          )}
-        </View>
+        {renderRatingField("priority", "Приоритет", priorityLevel)}
+        {renderRatingField("value", "Ценность", valueLevel)}
+        {renderRatingField("effort", "Усилия", effortLevel)}
       </View>
 
       <View style={styles.section}>
-        <Text style={styles.label}>Оценка срока</Text>
-        <View style={styles.timelineContainer}>
-          <View style={styles.timelineDot} />
-          <View style={styles.timelineDot} />
-          <View style={styles.timelineDot} />
-          <View style={styles.timelineDot} />
-          <View style={styles.timelineDot} />
-          <View style={styles.timelineLine} />
-        </View>
-        <View style={styles.timelineLabels}>
-          <Text style={styles.timelineLabel}>Пессимистичная</Text>
-          <Text style={styles.timelineLabel}>Оптимистичная</Text>
-          <Text style={styles.timelineLabel}>Ближайший срок</Text>
-          <Text style={styles.timelineLabel}>Средняя</Text>
-          <Text style={styles.timelineLabel}>Нежелательно</Text>
-        </View>
+        <Text style={styles.label}>Оценка срока (длительность)</Text>
+        <DurationSlider
+          value={estimatedDuration}
+          min={1}
+          max={5}
+          step={1}
+          disabled={!isEditable}
+          onChange={(hours) => {
+            setEstimatedDuration(hours);
+            collaboration?.pushWrite("estimated_duration", hours);
+          }}
+        />
       </View>
 
+      {renderEditorHint("required_skills")}
+      <Tags
+        key={task?.task_id ?? "new-task"}
+        title="Необходимые навыки"
+        field="required_skills"
+        setValue={handleSkillsTags}
+        tagsFromAPI={skillsList}
+        editable={isEditable}
+      />
+
       <View style={styles.section}>
-        <Text style={styles.label}>Необходимые навыки</Text>
+        <Text style={styles.label}>Исполнители</Text>
         <View style={styles.infoField}>
-          <Text style={styles.infoText}>{taskData.skills}</Text>
+          <Text style={styles.infoText}>{assignmentSummary}</Text>
         </View>
+        {isEditable && colleagues.length > 0 ? (
+          <TouchableOpacity
+            style={[styles.assignButton, { marginTop: 8 }]}
+            onPress={() => setTeamPickerVisible(true)}
+          >
+            <Text style={styles.assignButtonText}>Выбрать команду</Text>
+          </TouchableOpacity>
+        ) : isEditable ? (
+          <Text style={[styles.infoText, { marginTop: 6, color: TextColors.lunar_base }]}>
+            Нет коллег в списке — добавьте связи в профиле
+          </Text>
+        ) : null}
       </View>
 
-      <TouchableOpacity style={styles.assignButton}>
-        <Text style={styles.assignButtonText}>Поручить задачу</Text>
-      </TouchableOpacity>
-
-      <View style={styles.section}>
-        <Text style={styles.label}>Поручена задача 2 исполнителям</Text>
-        <View style={styles.infoField}>
-          <Text style={styles.infoText}>{taskData.assignees}</Text>
-        </View>
-      </View>
-
-      <View style={[styles.section, mode == 'create' && { marginBottom: 40 }]}>
+      <View style={[styles.section, mode === "create" && { marginBottom: 40 }]}>
         <Text style={styles.label}>Проекты</Text>
         <TouchableOpacity style={styles.addProjectButton}>
           <Text style={styles.addProjectButtonText}>Добавить</Text>
@@ -236,30 +404,85 @@ export const TaskInfoTab = ({ mode }: { mode: 'create' | 'view' | 'edit' }) => {
         </View>
       </View>
 
-      {mode !== 'create' && (
+      {mode !== "create" && (
         <TouchableOpacity style={styles.deleteButton} onPress={handleDelete}>
           <Text style={styles.deleteButtonText}>Удалить</Text>
         </TouchableOpacity>
       )}
 
-      {/* Все модальные окна */}
-      <ModalItem
-        isVisible={isStatusPickerVisible}
-        onClose={() => { setIsStatusPickerVisible(false) }}
-      >
-        {STATUSES.map((status) => (
+      <ModalItem isVisible={isStatusPickerVisible} onClose={() => setIsStatusPickerVisible(false)}>
+        {STATUSES.map((nextStatus) => (
           <TouchableOpacity
-            key={status}
-            onPress={() => { setTaskData({ ...taskData, status }); setIsStatusPickerVisible(false) }}
-            style={[styles.modalItem, { backgroundColor: getStatusColor(status) }]}
+            key={nextStatus}
+            onPress={() => {
+              setTaskData({ ...taskData, status: nextStatus });
+              collaboration?.pushWrite("status", nextStatus);
+              setIsStatusPickerVisible(false);
+            }}
+            style={[styles.modalItem, { backgroundColor: getStatusColor(nextStatus) }]}
           >
-            <Text style={{ color: getStatusTextColor(status), fontFamily: 'Century-Regular' }}>{status}</Text>
+            <Text style={{ color: getStatusTextColor(nextStatus), fontFamily: "Century-Regular" }}>
+              {nextStatus}
+            </Text>
           </TouchableOpacity>
         ))}
       </ModalItem>
+
+      <ModalItem isVisible={ratingPicker !== null} onClose={() => setRatingPicker(null)}>
+        <Text style={[styles.label, { marginBottom: 12, textAlign: "center" }]}>
+          {ratingPicker === "priority"
+            ? "Приоритет"
+            : ratingPicker === "value"
+              ? "Ценность"
+              : "Усилия"}
+        </Text>
+        {ratingPicker &&
+          RATING_PICKER_ITEMS.map((item) => (
+            <TouchableOpacity
+              key={item.value}
+              onPress={() => applyRating(ratingPicker, item.value)}
+              style={styles.modalItem}
+            >
+              <Text style={{ fontFamily: "Century-Regular", color: TextColors.dire_wolf }}>
+                {item.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+      </ModalItem>
+
+      <ModalItem isVisible={teamPickerVisible} onClose={() => setTeamPickerVisible(false)}>
+        <Text style={[styles.label, { marginBottom: 12 }]}>Выберите исполнителей</Text>
+        {colleagues.map((c) => {
+          const selected = assignmentUserIds.includes(c.user_id);
+          return (
+            <TouchableOpacity
+              key={c.user_id}
+              onPress={() => toggleAssignment(c.user_id)}
+              style={[
+                styles.modalItem,
+                { backgroundColor: selected ? MainColors.pool_water : MainColors.pixel_white },
+              ]}
+            >
+              <Text style={{ color: selected ? MainColors.white : TextColors.dire_wolf }}>
+                {formatColleagueName(c)} {selected ? "✓" : ""}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </ModalItem>
+
+      <DatePickerProfile
+        field="end_date"
+        showDatePicker={showDeadlinePicker}
+        currentDate={endDate}
+        handleDateChange={handleDeadlineChange}
+        setShowDatePicker={changeShowPicker}
+        minDate={new Date().toISOString().slice(0, 10)}
+        maxDate={toCalendarMaxDate()}
+      />
     </ScrollView>
-  )
-}
+  );
+});
 
 const styles = StyleSheet.create({
   content: {
@@ -273,21 +496,20 @@ const styles = StyleSheet.create({
     marginBottom: 5,
     fontSize: 14,
     color: TextColors.lunar_base,
-    fontFamily: 'Century-Regular',
+    fontFamily: "Century-Regular",
   },
   input: {
+    borderWidth: 1,
+    borderColor: TextColors.dim_gray,
+    borderRadius: 8,
+    marginBottom: 20,
+    padding: 12,
     fontSize: 16,
     color: TextColors.lunar_base,
-    fontFamily: 'Century-Regular',
+    fontFamily: "Century-Regular",
   },
   multilineInput: {
-    textAlignVertical: 'top',
-  },
-  pickerContainer: {
-    overflow: 'hidden',
-  },
-  picker: {
-    color: TextColors.dire_wolf,
+    textAlignVertical: "top",
   },
   infoField: {
     padding: 8,
@@ -297,11 +519,18 @@ const styles = StyleSheet.create({
   infoText: {
     fontSize: 14,
     color: TextColors.dire_wolf,
-    fontFamily: 'Century-Regular',
+    fontFamily: "Century-Regular",
+  },
+  editorHint: {
+    fontSize: 12,
+    color: TextColors.dim_gray,
+    fontFamily: "Century-Regular",
+    marginBottom: 6,
+    textAlign: "center",
   },
   row: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    justifyContent: "space-between",
     marginBottom: 20,
   },
   flex1: {
@@ -311,92 +540,57 @@ const styles = StyleSheet.create({
   statusBadge: {
     padding: 8,
     borderRadius: 5,
-    alignItems: 'center',
+    alignItems: "center",
   },
   statusText: {
     fontSize: 14,
-    fontFamily: 'Century-Regular',
+    fontFamily: "Century-Regular",
   },
   urgencyIcon: {
-    alignItems: 'center',
-  },
-  timelineContainer: {
-    height: 2,
-    backgroundColor: TextColors.dim_gray,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginVertical: 10,
-    position: 'relative',
-  },
-  timelineDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: TextColors.dim_gray,
-  },
-  timelineLine: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 2,
-    backgroundColor: TextColors.dim_gray,
-  },
-  timelineLabels: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 4,
-  },
-  timelineLabel: {
-    fontSize: 10,
-    color: TextColors.dim_gray,
-    textAlign: 'center',
-    flex: 1,
-    fontFamily: 'Century-Regular',
+    alignItems: "center",
   },
   assignButton: {
     width: 180,
     backgroundColor: MainColors.herbery_honey,
     padding: 12,
     borderRadius: 4,
-    alignItems: 'center',
+    alignItems: "center",
     marginBottom: 20,
   },
   assignButtonText: {
     color: TextColors.dire_wolf,
     fontSize: 16,
-    fontFamily: 'Century-Regular',
+    fontFamily: "Century-Regular",
   },
   addProjectButton: {
     borderWidth: 1,
     borderColor: MainColors.pool_water,
     padding: 8,
     borderRadius: 4,
-    alignItems: 'center',
+    alignItems: "center",
     marginBottom: 8,
   },
   addProjectButtonText: {
     color: MainColors.pool_water,
     fontSize: 16,
-    fontFamily: 'Century-Regular',
+    fontFamily: "Century-Regular",
   },
   noProjectsContainer: {
     padding: 16,
     backgroundColor: MainColors.pixel_white,
     borderRadius: 4,
-    alignItems: 'center',
+    alignItems: "center",
   },
   noProjectsText: {
     color: TextColors.dim_gray,
     fontSize: 16,
-    fontFamily: 'Century-Regular',
+    fontFamily: "Century-Regular",
   },
   deleteButton: {
     width: 150,
     padding: 12,
     borderRadius: 4,
-    alignItems: 'center',
+    alignItems: "center",
     marginTop: 20,
     marginBottom: 40,
     borderWidth: 1,
@@ -405,12 +599,12 @@ const styles = StyleSheet.create({
   deleteButtonText: {
     color: TextColors.ottoman_red,
     fontSize: 16,
-    fontFamily: 'Century-Regular',
+    fontFamily: "Century-Regular",
   },
   modalItem: {
     padding: 10,
     marginBottom: 10,
-    alignItems: 'center',
+    alignItems: "center",
     borderRadius: 5,
   },
 });

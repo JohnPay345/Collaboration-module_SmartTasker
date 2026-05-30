@@ -8,12 +8,12 @@ export const usersSchema = z.object({
   last_name: z.string()
     .optional(),
 
-  email: z.string().email(),
+  email: z.string().email()
+    .regex(/^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,4}$/i, 'Некорректный формат email'),
 
   phone_number: z.string()
+    .regex(/^[0-9+\-()\s]*$/, 'Телефон может содержать только цифры, +, -, пробелы и скобки')
     .optional(),
-
-  password: z.string(),
 
   birth_date: z.date()
     .optional(),
@@ -24,15 +24,20 @@ export const usersSchema = z.object({
   gender: z.enum(['Мужчина', 'Женщина'] as const)
     .default('Мужчина'),
 
+  lastVisit: z.date(),
+
   address: z.string()
     .optional(),
 
   job_title: z.string()
     .optional(),
 
-  last_login: z.date(),
+  avatarpath: z.string(),
 
-  skills: z.array(z.string())
+  last_login: z.string()
+    .optional(),
+
+  skills: z.string()
 });
 
 export type UsersFormData = z.infer<typeof usersSchema>;

@@ -21,7 +21,7 @@ export const projectSchema = z.object({
 
   author_id: z.string(),
 
-  tags: z.array(z.string())
+  tags: z.string()
     .optional(),
 
   created_at: z.date(),

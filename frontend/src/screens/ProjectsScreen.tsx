@@ -13,21 +13,19 @@ import { MainColors, TextColors } from '@/constants';
 import { ProjectItem } from '@src/components/ProjectItem';
 import { BurgerMenu } from '@src/components/BurgerMenu';
 import { router } from 'expo-router';
-import { useProjects } from '@src/context/ProjectsContext';
-
-type ProjectStatus = 'В работе' | 'Выполнена' | 'Сдана' | 'Провален' | 'Неактуально' | 'Приостановлен' | 'Черновик';
-
-interface Project {
-  id: number;
-  title: string;
-  tasksCount: number;
-  completedTasks: number;
-  deadline: string;
-  status: ProjectStatus;
-}
+import { useCurrentUserId } from '@src/hooks/useCurrentUserId';
+import { useProjects as useProjectsApi, type Project } from '@src/api/projects';
+import { useTasks } from '@src/api/tasks';
+import { Header } from '@src/components/Header'
+import { Footer } from '@src/components/Footer'
+import { FailedLoadContent } from '@src/components/FailedLoadContent'
 
 export const ProjectsScreen = () => {
-  const { projects } = useProjects();
+  const userId = useCurrentUserId();
+  const { data: projectsData, isLoading: projectsLoading } = useProjectsApi(userId ?? '');
+  const { data: tasks = [] } = useTasks({ user_id: userId ?? '' });
+
+  const projects = Array.isArray(projectsData) ? projectsData : (projectsData as any)?.data ?? [];
   const [searchQuery, setSearchQuery] = useState('');
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
@@ -35,82 +33,36 @@ export const ProjectsScreen = () => {
     project.project_name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  // MOCK задачи для примера прогресса
-  const mockTasks = [
-    { task_id: 't1', project_id: '1', status: 'Выполнена' },
-    { task_id: 't2', project_id: '1', status: 'В работе' },
-    { task_id: 't3', project_id: '1', status: 'Выполнена' },
-    { task_id: 't4', project_id: '2', status: 'Выполнена' },
-    { task_id: 't5', project_id: '2', status: 'Выполнена' },
-    { task_id: 't6', project_id: '2', status: 'В работе' },
-  ];
-
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Проекты</Text>
-        <TouchableOpacity onPress={() => router.push("/inbox")}>
-          <Ionicons name="notifications-outline" size={30} color={MainColors.pool_water} />
-        </TouchableOpacity>
-      </View>
+      <Header titleScreen={"Проекты"} />
 
-      <View style={styles.searchContainer}>
-        <View style={styles.searchInputContainer}>
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Поиск"
-            placeholderTextColor="#868686"
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-          />
-        </View>
-        <TouchableOpacity style={styles.filterButton}>
-          <Ionicons name="options" size={30} color={MainColors.pool_water} />
-        </TouchableOpacity>
-      </View>
-
-      {projects.length === 0 ? (
+      {projectsLoading ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={MainColors.pool_water} />
           <Text style={styles.loadingText}>Загрузка проектов...</Text>
         </View>
-      ) : (
-        <ScrollView style={styles.content}>
-          {filteredProjects.map(project => {
-            const projectTasks = mockTasks.filter(t => t.project_id === project.project_id);
+      ) : filteredProjects.length ? filteredProjects.map(project => {
+            const projectTasks = tasks.filter((t) => t.project_id === project.project_id);
             const tasksCount = projectTasks.length;
             const completedTasks = projectTasks.filter(t => t.status === 'Выполнена').length;
+            const deadline = project.end_date ? new Date(project.end_date).toLocaleDateString('ru-RU') : '';
             return (
-              <ProjectItem
-                key={project.project_id}
-                title={project.project_name}
-                tasksCount={tasksCount}
-                completedTasks={completedTasks}
-                deadline={project.end_date.toLocaleDateString()}
-                status={project.status}
-                onPress={() => { router.push(`/(projects)/${project.project_id}`) }}
-              />
+              <ScrollView style={styles.content}>
+                <ProjectItem
+                  key={project.project_id}
+                  title={project.project_name}
+                  tasksCount={tasksCount}
+                  completedTasks={completedTasks}
+                  deadline={deadline}
+                  status={project.status}
+                  onPress={() => { router.push(`/(projects)/${project.project_id}`) }}
+                />
+              </ScrollView>
             );
-          })}
-        </ScrollView>
-      )}
+          }) : <FailedLoadContent text={"Проектов нет или же вас не пригласили"} />}
 
-      <View style={styles.bottomNav}>
-        <TouchableOpacity
-          style={styles.menuButton}
-          onPress={() => setIsMenuOpen(true)}
-        >
-          <Ionicons name="menu" size={35} color={MainColors.pool_water} />
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.addButton}
-          onPress={() => { router.push('/(projects)/create'); }}
-        >
-          <Ionicons name="add" size={35} color={MainColors.pool_water} />
-        </TouchableOpacity>
-      </View>
-
-      <BurgerMenu isOpen={isMenuOpen} onClose={() => setIsMenuOpen(false)} />
+      <Footer />
     </View>
   );
 }
@@ -121,48 +73,6 @@ const styles = StyleSheet.create({
     width: '100%',
     alignItems: 'center',
     backgroundColor: MainColors.white,
-  },
-  header: {
-    width: '100%',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 30,
-    paddingBottom: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: TextColors.dim_gray,
-    boxShadow: '0px 0px 10px 0px rgba(0, 0, 0, 0.4)',
-  },
-  headerTitle: {
-    fontSize: 20,
-    color: TextColors.dire_wolf,
-    fontFamily: 'Century-Regular',
-  },
-  searchContainer: {
-    width: '100%',
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-  },
-  searchInputContainer: {
-    width: '90%',
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: MainColors.snowbank,
-    borderRadius: 5,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-  },
-  searchInput: {
-    flex: 1,
-    color: '#868686',
-    fontSize: 16,
-    fontFamily: 'Century-Regular',
-  },
-  filterButton: {
-    padding: 8,
   },
   content: {
     width: '100%',
@@ -175,6 +85,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   loadingText: {
+    marginTop: 10,
+    color: MainColors.pool_water,
+    fontSize: 14,
+    fontFamily: 'Century-Regular',
+  },
+  failedContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  failedText: {
     marginTop: 10,
     color: MainColors.pool_water,
     fontSize: 14,

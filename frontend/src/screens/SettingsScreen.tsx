@@ -1,9 +1,9 @@
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
 import React from 'react';
-import { EvilIcons, Feather, Ionicons, MaterialIcons } from '@expo/vector-icons';
+import { Feather, Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { MainColors, TextColors, Images } from '@/constants';
 import { router } from 'expo-router';
-import { SvgProps, SvgXml } from 'react-native-svg';
+import { HeaderEditor } from '@src/components/HeaderEditor'
 
 type SettingsItemProps = {
   title: string;
@@ -33,17 +33,11 @@ export const SettingsScreen = () => {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <View style={styles.headerButton}>
-          <TouchableOpacity onPress={handleBack}>
-            <EvilIcons name="close" size={40} color={TextColors.dim_gray} />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Настройки</Text>
-        </View>
-        <TouchableOpacity onPress={handleSave} style={styles.headerButton}>
-          <Ionicons name="checkmark" size={35} color={MainColors.pool_water} />
-        </TouchableOpacity>
-      </View>
+      <HeaderEditor
+        title={"Настройки"}
+        onBack={handleBack}
+        onSave={handleSave}
+      />
 
       <ScrollView
         style={styles.scrollView}
@@ -54,12 +48,12 @@ export const SettingsScreen = () => {
           <SettingsItem
             title="Основные"
             settingsIcon={<Feather name="settings" size={35} color={TextColors.pool_water} />}
-            onPress={() => { }}
+            onPress={() => { router.push(`/(settings)/main_settings`) }}
           />
           <SettingsItem
             title="Уведомления"
             settingsIcon={<Ionicons name="notifications-outline" size={35} color={TextColors.pool_water} />}
-            onPress={() => { }}
+            onPress={() => { router.push(`/(settings)/notifications_settings`) }}
           />
         </View>
       </ScrollView>

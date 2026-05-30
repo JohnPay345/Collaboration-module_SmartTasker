@@ -32,7 +32,7 @@ export const FollowScreen: React.FC<FollowScreen> = ({follow_id}) => {
           </View>
           <TabsComponent activeTab={0} onTabChange={(index) => { }}>
             <Tab label="Профиль">
-              <ColleagueProfileTab />
+              <ColleagueProfileTab user_id={follow_id ?? ''} />
             </Tab>
             <Tab label="Чат">
               <ColleagueChatTab peerId={follow_id ?? undefined} />

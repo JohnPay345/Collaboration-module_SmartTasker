@@ -13,7 +13,7 @@ import { Images, MainColors, TextColors } from '@/constants';
 import { RelativePathString, router } from 'expo-router';
 import { useSettings } from '@src/context/SettingsContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { getUsers, useLogin, useUser, useUsers } from '@src/api/users';
+import { useLogin, useUser, useUsers } from '@src/api/users';
 import { TextError } from '@src/components/TextError'
 import { setToken } from '@src/services/tokenStorage'
 

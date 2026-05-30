@@ -1,115 +1,111 @@
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
-import React, { useEffect, useState } from 'react';
-import { EvilIcons, Ionicons } from '@expo/vector-icons';
-import { BASE_URL, MainColors, TextColors } from '@/constants';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  ScrollView,
+  ActivityIndicator,
+} from 'react-native';
+import React, { useEffect } from 'react';
+import { Ionicons } from '@expo/vector-icons';
+import { MainColors, TextColors } from '@/constants';
 import { router } from 'expo-router';
-import { ModalItem } from '@src/components/ModalItem';
-
-type notificationType = {
-  id: string,
-  user_id: string,
-  notification_type: string,
-  notification_title: string,
-  notification_body: string,
-  notification_data: string,
-  is_read: boolean,
-  created_at: Date,
-}
+import { useCurrentUserId } from '@src/hooks/useCurrentUserId';
+import { useNotifications, useMarkNotificationRead } from '@src/api/notifications';
+import { useNotificationsContext } from '@src/context/NotificationsContext';
+import { HeaderEditor } from '@src/components/HeaderEditor';
 
 export const InboxScreen = () => {
-  const [isShowModalNotification, setIsShowModalNotification] = useState<boolean>(false);
-  const [notificationsData, setNotificationsData] = useState<notificationType[]>([]);
-  const [selectedNotification, setSelectedNotification] = useState<notificationType | null>(null);
+  const userId = useCurrentUserId();
+  const { data: apiNotifications = [], isLoading, isError } = useNotifications(userId ?? '');
+  const { inboxNotifications, setInboxFromApi, markReadLocally } = useNotificationsContext();
+  const markRead = useMarkNotificationRead();
 
-  // Запрос уведомлений пользователя
+  // Синхронизируем HTTP данные в контекст
   useEffect(() => {
-    //const inAppNotifications = getInAppNotifications();
-    const tempNotifications = [
-      {
-        id: 1,
-        user_id: 23,
-        notification_type: 'task.test',
-        notification_title: 'Первое уведомление',
-        notification_body: 'Тело первого уведомления',
-        notification_data: '',
-        is_read: false,
-        created_at: new Date()
-      },
-      {
-        id: 2,
-        user_id: 23,
-        notification_type: 'task.test',
-        notification_title: 'Второе уведомление',
-        notification_body: 'Тело второго уведомления',
-        notification_data: '',
-        is_read: false,
-        created_at: new Date()
-      },
-      {
-        id: 3,
-        user_id: 23,
-        notification_type: 'task.test',
-        notification_title: 'Третье уведомление',
-        notification_body: 'Тело третье уведомления',
-        notification_data: '',
-        is_read: false,
-        created_at: new Date()
-      },
-      {
-        id: 4,
-        user_id: 23,
-        notification_type: 'task.test',
-        notification_title: 'Четвёртое уведомление',
-        notification_body: 'Тело четвёртого уведомления',
-        notification_data: '',
-        is_read: false,
-        created_at: new Date()
-      }
-    ];
-    setNotificationsData(tempNotifications);
-  }, []);
+    if (apiNotifications.length) setInboxFromApi(apiNotifications);
+  }, [apiNotifications]);
 
-  const getInAppNotifications = async () => {
-    const response = await fetch(`${BASE_URL}/notification/in-app`);
-    const data = await response.json();
-    setNotificationsData(data);
-  }
+  // Сортируем по дате (контекст смешивает WS + HTTP)
+  const sorted = [...inboxNotifications].sort(
+    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+  );
 
-  const handleBack = () => {
-    router.back();
+  const handleReadNotification = (notificationId: string) => {
+    if (!userId) return;
+    markReadLocally(notificationId);
+    markRead.mutate({ userId, notificationId });
   };
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <View style={styles.headerButton}>
-          <TouchableOpacity onPress={handleBack}>
-            <EvilIcons name="close" size={40} color={TextColors.dim_gray} />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Уведомления</Text>
-        </View>
-      </View>
-      <ScrollView style={styles.content}>
-        {/* Список уведомлений */}
-        {notificationsData && notificationsData.map((notification: notificationType) => (
-          <TouchableOpacity key={notification.id} onPress={() => { setIsShowModalNotification(true); setSelectedNotification(notification) }}>
-            <View style={styles.notificationItem}>
-              <Text style={styles.notificationTitle}>{notification.notification_title}</Text>
-              <Text style={styles.notificationBody}>{notification.notification_body}</Text>
-            </View>
-          </TouchableOpacity>
-        ))}
+      <HeaderEditor
+        title="Уведомления"
+        onSave={() => router.back()}
+        onBack={() => router.back()}
+      />
 
-        {/* Модальные окна */}
-        <ModalItem
-          isVisible={isShowModalNotification}
-          onClose={() => { setIsShowModalNotification(false) }}
-        >
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>{selectedNotification?.notification_title}</Text>
-            <Text style={styles.modalBody}>{selectedNotification?.notification_body}</Text>
+      <ScrollView style={styles.content}>
+        {isLoading && (
+          <View style={styles.centered}>
+            <ActivityIndicator size="large" color={MainColors.pool_water} />
+            <Text style={styles.loadingText}>Загрузка уведомлений...</Text>
           </View>
-        </ModalItem>
+        )}
+
+        {!isLoading && isError && (
+          <Text style={styles.errorText}>Не удалось загрузить уведомления</Text>
+        )}
+
+        {!isLoading && !isError && sorted.length === 0 && (
+          <Text style={styles.emptyText}>Уведомлений пока нет</Text>
+        )}
+
+        {!isLoading &&
+          !isError &&
+          sorted.map((notification) => {
+            const unread = !notification.is_read;
+            return (
+              <TouchableOpacity
+                key={notification.notification_id}
+                activeOpacity={0.85}
+                onPress={() => {
+                  if (unread) handleReadNotification(notification.notification_id);
+                }}
+              >
+                <View style={[styles.notificationItem, unread && styles.notificationUnread]}>
+                  <View style={styles.notificationHeader}>
+                    <Text
+                      style={[styles.notificationTitle, unread && styles.notificationTitleUnread]}
+                      numberOfLines={1}
+                    >
+                      {notification.notification_title}
+                    </Text>
+                    <View style={styles.metaRow}>
+                      {unread && <View style={styles.unreadDot} />}
+                      <Text style={styles.dateText}>
+                        {new Date(notification.created_at).toLocaleString('ru-RU', {
+                          day: '2-digit',
+                          month: '2-digit',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
+                      </Text>
+                    </View>
+                  </View>
+                  <Text style={styles.notificationBody} numberOfLines={3}>
+                    {notification.notification_body}
+                  </Text>
+                  {unread && (
+                    <View style={styles.readHint}>
+                      <Ionicons name="checkmark-circle-outline" size={14} color={MainColors.pool_water} />
+                      <Text style={styles.readHintText}>Нажмите, чтобы отметить прочитанным</Text>
+                    </View>
+                  )}
+                </View>
+              </TouchableOpacity>
+            );
+          })}
       </ScrollView>
     </View>
   );
@@ -120,62 +116,92 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: MainColors.white,
   },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingTop: 30,
-    paddingBottom: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: TextColors.dim_gray,
-  },
-  headerButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontFamily: 'Century-Regular',
-    color: TextColors.dire_wolf,
-    marginLeft: 10,
-  },
-  headerActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
   content: {
     flex: 1,
     padding: 16,
   },
+  centered: {
+    paddingVertical: 40,
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 10,
+    color: MainColors.pool_water,
+    fontSize: 14,
+    fontFamily: 'Century-Regular',
+  },
+  errorText: {
+    color: TextColors.ottoman_red,
+    fontSize: 14,
+    fontFamily: 'Century-Regular',
+    marginTop: 8,
+  },
+  emptyText: {
+    color: TextColors.dim_gray,
+    fontSize: 14,
+    fontFamily: 'Century-Regular',
+    marginTop: 16,
+    textAlign: 'center',
+  },
   notificationItem: {
-    padding: 10,
+    padding: 14,
     borderWidth: 1,
     borderColor: TextColors.dim_gray,
     borderRadius: 10,
     marginBottom: 10,
+    backgroundColor: MainColors.white,
+  },
+  notificationUnread: {
+    borderColor: MainColors.pool_water,
+    backgroundColor: '#f0f8ff',
+  },
+  notificationHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 6,
   },
   notificationTitle: {
-    fontSize: 16,
+    flex: 1,
+    fontSize: 15,
     fontFamily: 'Century-Regular',
     color: TextColors.dire_wolf,
+    marginRight: 8,
+  },
+  notificationTitleUnread: {
+    fontWeight: '700',
+  },
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  unreadDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: MainColors.pool_water,
+  },
+  dateText: {
+    fontSize: 12,
+    color: TextColors.dim_gray,
+    fontFamily: 'Century-Regular',
   },
   notificationBody: {
-    fontSize: 14,
+    fontSize: 13,
     fontFamily: 'Century-Regular',
     color: TextColors.dim_gray,
+    lineHeight: 18,
   },
-  modalContent: {
-    marginBottom: 10,
+  readHint: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+    gap: 4,
   },
-  modalTitle: {
-    fontSize: 16,
+  readHintText: {
+    fontSize: 11,
+    color: MainColors.pool_water,
     fontFamily: 'Century-Regular',
-    color: TextColors.dire_wolf,
   },
-  modalBody: {
-    fontSize: 14,
-    fontFamily: 'Century-Regular',
-    color: TextColors.dim_gray,
-  },
-}); 
+});

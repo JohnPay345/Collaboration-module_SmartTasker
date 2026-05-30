@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -8,127 +8,63 @@ import {
   ActivityIndicator,
   ScrollView,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
 import { MainColors, TextColors } from '@/constants';
 import { TaskItem } from '@src/components/TaskItem';
-import { BurgerMenu } from '@src/components/BurgerMenu';
 import { router } from 'expo-router';
-
-type TaskStatus = 'В работе' | 'Выполнена' | 'Сдана' | 'Провален' | 'Неактуально' | 'Черновик';
-
-interface Task {
-  id: number;
-  title: string;
-  project: string;
-  assignment: string;
-  priority: number;
-  date: string;
-  status: TaskStatus;
-}
+import { useCurrentUserId } from '@src/hooks/useCurrentUserId';
+import { useTasks, type Task } from '@src/api/tasks';
+import { useProjects } from '@src/api/projects';
+import { Header } from '@src/components/Header'
+import { Footer } from '@src/components/Footer'
+import { FailedLoadContent } from '../components/FailedLoadContent';
+import { LoadingContent } from '@src/components/LoadingContent'
 
 export const TasksScreen = () => {
-  const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [tasks, setTasks] = useState<Task[]>([]);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
-  useEffect(() => {
-    loadTasks();
-  }, []);
+  const userId = useCurrentUserId();
+  const { data: tasks = [], isLoading } = useTasks({ user_id: userId ?? '' });
+  const { data: projectsData } = useProjects(userId ?? '');
+  const projectsList = Array.isArray(projectsData) ? projectsData : (projectsData as any)?.data ?? [];
+  const projectNameById = new Map<string, string>(projectsList.map((p: any) => [p.project_id, p.project_name]));
 
-  const loadTasks = async () => {
-    // TODO: Заменить на запрос к API
-    try {
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      setTasks([
-        {
-          id: 1,
-          title: 'Задача 1',
-          project: 'Проект 1',
-          assignment: 'Сотрудник 1',
-          priority: 1,
-          date: '08.01.2025 18:45',
-          status: 'Черновик'
-        },
-        {
-          id: 2,
-          title: 'Задача 2',
-          project: 'Проект 2',
-          assignment: 'Задача самому себе',
-          priority: 1,
-          date: '18:45',
-          status: 'Черновик'
-        },
-      ]);
-    } catch (error) {
-      console.error('Ошибка загрузки задач:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  const filteredTasks = tasks.filter((t) => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return true;
+    return (t.task_name ?? '').toLowerCase().includes(q);
+  });
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Задачи</Text>
-        <TouchableOpacity onPress={() => router.push("/inbox")}>
-          <Ionicons name="notifications-outline" size={30} color={TextColors.pool_water} />
-        </TouchableOpacity>
-      </View>
-
-      <View style={styles.searchContainer}>
-        <View style={styles.searchInputContainer}>
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Поиск"
-            placeholderTextColor="#868686"
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-          />
-        </View>
-        <TouchableOpacity style={styles.filterButton}>
-          <Ionicons name="options" size={30} color={TextColors.pool_water} />
-        </TouchableOpacity>
-      </View>
+      <Header titleScreen={"Задача"} />
 
       {isLoading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={MainColors.pool_water} />
-          <Text style={styles.loadingText}>Загрузка задач...</Text>
-        </View>
-      ) : (
+        <LoadingContent loadingText={'Загрузка задач...'} />
+      ) : filteredTasks.length ? (
         <ScrollView style={styles.content}>
-          {tasks.map(task => (
+          {filteredTasks.map((task: Task) => {
+            const projectTitle = task.project_id ? (projectNameById.get(task.project_id) ?? 'Проект') : 'Вне проекта';
+            const date = task.updated_at
+              ? new Date(task.updated_at).toLocaleString('ru-RU')
+              : (task.created_at ? new Date(task.created_at).toLocaleString('ru-RU') : '');
+            return (
             <TaskItem
-              key={task.id}
-              title={task.title}
-              project={task.project}
-              assignment={task.assignment}
-              priority={task.priority}
-              date={task.date}
+              key={task.task_id}
+              title={task.task_name}
+              project={projectTitle}
+              assignment={task.author_id ? `Автор: ${task.author_name}` : ''}
+              priority={Number(task.priority ?? 0)}
+              date={date}
               status={task.status}
-              onPress={() => router.push(`/(tasks)/${task.id}`)}
+              onPress={() => router.push(`/(tasks)/${task.task_id}`)}
             />
-          ))}
+            );
+          })}
         </ScrollView>
-      )}
+      ) : <FailedLoadContent text={"Задач нет или же вам не поручили их"} /> }
 
-      <View style={styles.bottomNav}>
-        <TouchableOpacity
-          style={styles.menuButton}
-          onPress={() => setIsMenuOpen(true)}
-        >
-          <Ionicons name="menu" size={35} color={MainColors.pool_water} />
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.addButton}
-          onPress={() => router.push(`/(tasks)/create`)}
-        >
-          <Ionicons name="add" size={35} color={MainColors.pool_water} />
-        </TouchableOpacity>
-      </View>
-
-      <BurgerMenu isOpen={isMenuOpen} onClose={() => setIsMenuOpen(false)} />
+      <Footer />
     </View>
   );
 }
@@ -186,17 +122,6 @@ const styles = StyleSheet.create({
     width: '100%',
     flex: 1,
     paddingHorizontal: 16,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    marginTop: 10,
-    color: MainColors.pool_water,
-    fontSize: 14,
-    fontFamily: 'Century-Regular',
   },
   bottomNav: {
     width: '100%',

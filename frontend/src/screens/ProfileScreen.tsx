@@ -1,44 +1,36 @@
-import React, { useMemo, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, ScrollView, TextInput, Modal, Platform, FlatList } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
-import { EvilIcons, Ionicons, MaterialIcons, AntDesign } from '@expo/vector-icons';
-import { MainColors, TextColors, BASE_URL } from '@/constants';
-import { Agenda, Calendar, LocaleConfig } from 'react-native-calendars';
-import { Button } from '@react-navigation/elements';
+import { MaterialIcons } from '@expo/vector-icons';
+import { BASE_URL, MainColors, TextColors } from '@/constants';
+import { LocaleConfig } from 'react-native-calendars';
 import { HeaderEditor } from '@src/components/HeaderEditor';
+import { useCurrentUserId } from '@src/hooks/useCurrentUserId';
+import { useUser, type User } from '@src/api/users';
+import { DatePickerProfile } from '@src/modals/DatePickerProfile'
+import { GenderPickerProfile } from '@src/modals/GenderPickerProfile'
+import { UsersFormData, usersSchema } from '@src/schemas/users.schema'
+import { Controller, useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { Tags } from '@src/components/Tags'
+import { LoadingContent } from '@src/components/LoadingContent'
+import { SvgUri } from 'react-native-svg'
 
-interface ProfileData {
-  firstName: string;
-  lastName: string;
-  patronymic: string;
-  birthDate: string;
-  startDate: string;
-  gender: 'М' | 'Ж';
-  lastVisit: string;
-  phone: string;
-  email: string;
-  address: string;
-  position: string;
-  skills: string;
-}
-
-// Временные данные для демонстрации
-const mockProfileData: ProfileData = {
-  firstName: 'Винокурин',
-  lastName: 'Геннадий',
-  patronymic: 'Павлович',
-  birthDate: '01.01.2000',
-  startDate: '01.01.2020',
-  gender: 'М',
-  lastVisit: '01.01.2020, 21:89',
-  phone: '+7 (987) 132-90-21',
-  email: 'test@mail.ru',
-  address: 'Россия, Республика Башкортостан, г.Уфа, ул.Калинина',
-  position: 'Администратор системы',
-  skills: 'Администрирование ОС; Сетевые технологии; Облачные технологии',
+const emptyProfileData: UsersFormData = {
+  first_name: '',
+  middle_name: '',
+  last_name: '',
+  birth_date: new Date('01.01.2000'),
+  start_date: new Date('01.01.2020'),
+  gender: 'Мужчина',
+  lastVisit: new Date(),
+  phone_number: '',
+  email: '',
+  address: '',
+  job_title: '',
+  last_login: new Date().toLocaleString(),
+  skills: '',
 };
-
-const YEARS = Array.from({ length: 84 }, (_, i) => new Date().getFullYear() - i);
 
 LocaleConfig.locales['ru'] = {
   monthNames: [
@@ -62,15 +54,87 @@ LocaleConfig.locales['ru'] = {
 };
 LocaleConfig.defaultLocale = 'ru';
 
+const InfoRowMain = ({control, field, title, onPress}:{control: any, field: string, title: string, onPress: () => void}) => (
+  <Controller
+    name={field}
+    control={control}
+    render={({field: {onChange, onBlur, value}}) => (
+      <View style={styles.infoRowMain}>
+        <Text style={styles.labelMain}>{title}</Text>
+        <TouchableOpacity onPress={onPress}>
+          <Text style={styles.valueMain}>{value.toLocaleDateString("ru-RU")}</Text>
+        </TouchableOpacity>
+      </View>
+    )}
+  />
+);
+
+const InfoRow = ({control, field, title}:{control: any, field: string, title: string}) => (
+  <Controller
+    name={field}
+    control={control}
+    render={({field: {onChange, onBlur, value}}) => (
+      <View style={styles.infoRow}>
+        <Text style={styles.label}>{title}</Text>
+        <TextInput
+          style={styles.infoRowIn}
+          onChangeText={onChange}
+          value={value}
+        />
+      </View>
+    )}
+  />
+);
+
 export const ProfileScreen = () => {
   const router = useRouter();
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [activeField, setActiveField] = useState<'birth_date' | 'start_date'>('birth_date');
+  const [currentDate, setCurrentDate] = useState(new Date());
+  const [profileData, setProfileData] = useState(emptyProfileData);
   const [showGenderPicker, setShowGenderPicker] = useState(false);
-  const [showMonthYearPicker, setShowMonthYearPicker] = useState(false);
-  const [activeField, setActiveField] = useState<'birthDate' | 'startDate' | null>(null);
-  const [profileData, setProfileData] = useState(mockProfileData);
-  const [selectedDate, setSelectedDate] = useState(new Date());
-  const [tempDate, setTempDate] = useState(new Date());
+
+  const userId = useCurrentUserId();
+  const { data: user, isLoading } = useUser(userId ?? '');
+
+  const { handleSubmit, formState: {errors, defaultValues}, control, setValue, reset } = useForm<UsersFormData>({
+    resolver: zodResolver(usersSchema),
+    defaultValues: {
+      first_name: '',
+      middle_name: '',
+      last_name: '',
+      email: '',
+      phone_number: '',
+      birth_date: new Date("01.01.2000"),
+      start_date: new Date("01.01.2020"),
+      gender: 'Мужчина',
+      address: '',
+      job_title: '',
+      avatarpath: '',
+      last_login: new Date().toLocaleString('ru-RU'),
+      skills: ''
+    }
+  });
+
+  useEffect(() => {
+    if(user) {
+      reset({
+        first_name: user.first_name ?? '',
+        middle_name: user.middle_name ?? '',
+        last_name: user.last_name ?? '',
+        email: user.email ?? '',
+        phone_number: user.phone_number ?? '',
+        birth_date: user.birth_date ? new Date(user.birth_date) : new Date("01.01.2000"),
+        start_date: user.start_date ? new Date(user.start_date) : new Date("01.01.2020"),
+        gender: user.gender ?? "Мужчина",
+        address: user.address ?? '',
+        job_title: user.job_title ?? '',
+        avatarpath: user?.avatarpath ?? '',
+        last_login: user.last_login ? new Date(user.last_login).toLocaleString('ru-RU') : new Date().toLocaleString('ru-RU'),
+        skills: user.skills ? user.skills.toString() : '',
+      });
+    }
+  }, [user, setValue]);
 
   const handleBack = () => {
     router.back();
@@ -80,96 +144,38 @@ export const ProfileScreen = () => {
     router.back();
   };
 
+  const setValueTags = (field: string, postTags: string) => {
+    setValue(field as 'skills', postTags);
+  }
+
+  const handleDateChange = (normalizedDate:Date) => {
+    setValue(activeField, normalizedDate);
+  }
+
+  const handleChangeProfileData = (field: string, data: string) => {
+    setValue(field, data);
+  }
+
+  const parseDisplayDate = (dateString: string): Date => {
+    const [day, month, year] = dateString.split('.').map(Number);
+    if (!day || !month || !year) return new Date();
+    return new Date(year, month - 1, day);
+  };
+
+  const changeShowPicker = (picker: string, isShow: boolean)=> {
+    if(picker == 'DatePicker') {
+      setShowDatePicker(isShow);
+    } else if(picker == 'GenderPicker') {
+      setShowGenderPicker(isShow);
+    }
+  }
+
   const formatDate = (date: Date): string => {
     const day = date.getDate().toString().padStart(2, '0');
     const month = (date.getMonth() + 1).toString().padStart(2, '0');
     const year = date.getFullYear();
     return `${day}.${month}.${year}`;
   };
-
-  const handleDateSelect = (field: 'birthDate' | 'startDate') => {
-    setActiveField(field);
-    setShowDatePicker(true);
-    const [day, month, year] = profileData[field].split('.').map(Number);
-    setSelectedDate(new Date(year, month - 1, day));
-  };
-
-  const handleConfirm = (date: string) => {
-    const selectedDate = new Date(date);
-    if (activeField) {
-      setProfileData(prev => ({
-        ...prev,
-        [activeField]: formatDate(selectedDate)
-      }));
-      setSelectedDate(selectedDate);
-    }
-    setShowDatePicker(false);
-  };
-
-  const handleCancel = () => {
-    setShowDatePicker(false);
-  };
-
-  const getInitialDate = () => {
-    if (!activeField) return new Date();
-    const [day, month, year] = profileData[activeField].split('.').map(Number);
-    return new Date(year, month - 1, day);
-  };
-
-  const handleGenderSelect = (gender: 'М' | 'Ж') => {
-    setProfileData(prev => ({
-      ...prev,
-      gender
-    }));
-    setShowGenderPicker(false);
-  };
-
-  const handleMonthYearPress = () => {
-    setShowMonthYearPicker(true);
-    setTempDate(selectedDate);
-  };
-
-  const handleMonthSelect = (monthIndex: number) => {
-    const newDate = new Date(tempDate);
-    newDate.setMonth(monthIndex);
-    setTempDate(newDate);
-  };
-
-  const handleYearSelect = (year: number) => {
-    const newDate = new Date(tempDate);
-    newDate.setFullYear(year);
-    setTempDate(newDate);
-  };
-
-  const handleMonthYearConfirm = () => {
-    setSelectedDate(new Date(tempDate));
-    setShowMonthYearPicker(false);
-  };
-
-  const handleMonthYearCancel = () => {
-    setShowMonthYearPicker(false);
-  };
-
-  const InfoRowMain = ({ label, value, onPress }: { label: string; value: string; onPress?: () => void }) => (
-    <View style={styles.infoRowMain}>
-      <Text style={styles.labelMain}>{label}</Text>
-      <TouchableOpacity onPress={onPress}>
-        <Text style={styles.valueMain}>{value}</Text>
-      </TouchableOpacity>
-    </View>
-  );
-
-  const InfoRow = ({ label, value, onPress }: { label: string; value: string; onPress?: () => void }) => (
-    <View style={styles.infoRow}>
-      <Text style={styles.label}>{label}</Text>
-      <TouchableOpacity
-        style={[styles.value]}
-        onPress={onPress}
-      >
-        <Text style={styles.valueText}>{value}</Text>
-      </TouchableOpacity>
-    </View>
-  );
 
   return (
     <View style={styles.container}>
@@ -179,228 +185,178 @@ export const ProfileScreen = () => {
         onSave={handleSave}
       />
 
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollViewContent}
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.avatarSection}>
-          <View style={styles.avatarContainer}>
-            <Text style={styles.avatarText}>
-              {mockProfileData.firstName[0]}{mockProfileData.lastName[0]}
-            </Text>
-          </View>
-          <View style={styles.nameContainer}>
-            <TextInput style={styles.nameText} value={mockProfileData.firstName}
-              placeholder='Имя' placeholderTextColor={TextColors.lunar_base} />
-            <TextInput style={styles.nameText} value={mockProfileData.lastName}
-              placeholder='Фамилия' placeholderTextColor={TextColors.lunar_base} />
-            <TextInput style={styles.nameText} value={mockProfileData.patronymic}
-              placeholder='Отчество' placeholderTextColor={TextColors.lunar_base} />
-          </View>
-        </View>
-
-        <View style={styles.mainInfoContainer}>
-          <InfoRowMain
-            label="Дата рождения:"
-            value={profileData.birthDate}
-            onPress={() => handleDateSelect('birthDate')}
-          />
-          <InfoRowMain
-            label="Начало работы:"
-            value={profileData.startDate}
-            onPress={() => handleDateSelect('startDate')}
-          />
-          <InfoRowMain
-            label="Пол:"
-            value={profileData.gender}
-            onPress={() => setShowGenderPicker(true)}
-          />
-        </View>
-        <View style={styles.lastVisitContainer}>
-          <Text style={styles.lastVisitText}>Последнее посещение {mockProfileData.lastVisit}</Text>
-        </View>
-        <View style={styles.infoSection}>
-          <InfoRow label="Телефон" value={mockProfileData.phone} />
-          <InfoRow label="Email" value={mockProfileData.email} />
-          <InfoRow label="Адрес проживания" value={mockProfileData.address} />
-          <InfoRow label="Должность" value={mockProfileData.position} />
-          <InfoRow label="Области знаний" value={mockProfileData.skills} />
-          <TouchableOpacity style={styles.statisticsButton}>
-            <Text style={styles.statisticsText}>Статистика работы</Text>
-            <MaterialIcons name="keyboard-arrow-right" size={35} color={TextColors.dire_wolf} />
-          </TouchableOpacity>
-        </View>
-        <TouchableOpacity style={styles.changePasswordButton}>
-          <Text style={styles.changePasswordText}>Изменить пароль</Text>
-        </TouchableOpacity>
-
-        <Modal
-          visible={showDatePicker}
-          transparent
-          animationType="fade"
-          onRequestClose={handleCancel}
+      {isLoading ? (
+        <LoadingContent loadingText={'Загрузка профиля...'} />
+      ) : (
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.scrollViewContent}
+          showsVerticalScrollIndicator={false}
         >
-          <TouchableOpacity
-            style={styles.modalOverlay}
-            activeOpacity={1}
-            onPress={handleCancel}
-          >
-            <View style={styles.calendarContainer}>
-              <TouchableOpacity
-                onPress={handleMonthYearPress}
-                style={styles.calendarHeader}
-              >
-                <Text style={styles.calendarTitle}>
-                  {selectedDate.toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })}
-                </Text>
-              </TouchableOpacity>
-              <Calendar
-                markedDates={{
-                  [selectedDate.toISOString().split('T')[0]]: {
-                    selected: true,
-                    selectedColor: '#222222',
-                    selectedTextColor: 'yellow',
-                  }
-                }}
-                current={selectedDate.toISOString()}
-                minDate="1940-01-01"
-                maxDate={new Date().toISOString()}
-                onDayPress={(day) => handleConfirm(day.dateString)}
-                monthFormat={'yyyy MMMM'}
-                hideExtraDays={true}
-                firstDay={1}
-                theme={{
-                  backgroundColor: MainColors.white,
-                  calendarBackground: MainColors.white,
-                  textSectionTitleColor: TextColors.dire_wolf,
-                  selectedDayBackgroundColor: MainColors.pool_water,
-                  selectedDayTextColor: TextColors.ottoman_red,
-                  todayTextColor: MainColors.pool_water,
-                  dayTextColor: TextColors.dire_wolf,
-                  textDisabledColor: TextColors.dim_gray,
-                  arrowColor: TextColors.dire_wolf,
-                  monthTextColor: TextColors.dire_wolf,
-                  textDayFontFamily: 'Century-Regular',
-                  textMonthFontFamily: 'Century-Regular',
-                  textDayHeaderFontFamily: 'Century-Regular',
-                  textDayFontSize: 16,
-                  textMonthFontSize: 16,
-                  textDayHeaderFontSize: 14,
-                  arrowStyle: {
-                    padding: 10,
-                  }
-                }}
+          <View style={styles.avatarSection}>
+            <View style={styles.avatarContainer}>
+              <Controller
+                name={"avatarpath"}
+                control={control}
+                render={({field: {onChange, onBlur, value}}) => (
+                  <SvgUri style={styles.avatarImage}
+                          uri={BASE_URL + user.avatarpath} />
+                )}
               />
-              <View style={styles.calendarFooter}>
-              </View>
             </View>
-          </TouchableOpacity>
-        </Modal>
+            <View style={styles.nameContainer}>
+              <Controller
+                name={"first_name"}
+                control={control}
+                render={({field: {onChange, onBlur, value}}) => (
+                  <TextInput
+                    style={styles.nameText}
+                    value={value}
+                    placeholder='Фамилия'
+                    placeholderTextColor={TextColors.lunar_base}
+                    onChangeText={onChange}
+                  />
+                )}
+              />
+              <Controller
+                name={"middle_name"}
+                control={control}
+                render={({field: {onChange, onBlur, value}}) => (
+                  <TextInput
+                    style={styles.nameText}
+                    value={value}
+                    placeholder='Имя'
+                    placeholderTextColor={TextColors.lunar_base}
+                    onChangeText={onChange}
+                  />
+                )}
+              />
+              <Controller
+                name={"last_name"}
+                control={control}
+                render={({field: {onChange, onBlur, value}}) => (
+                  <TextInput
+                    style={styles.nameText}
+                    value={value}
+                    placeholder='Отчество'
+                    placeholderTextColor={TextColors.lunar_base}
+                    onChangeText={onChange}
+                  />
+                )}
+              />
+            </View>
+          </View>
 
-        <Modal
-          visible={showMonthYearPicker}
-          transparent
-          animationType="fade"
-          onRequestClose={handleMonthYearCancel}
-        >
-          <TouchableOpacity
-            style={styles.modalOverlay}
-            activeOpacity={1}
-            onPress={handleMonthYearCancel}
-          >
-            <View style={[styles.modalContent, { width: '90%' }]}>
-              <Text style={styles.modalTitle}>Выберите месяц и год</Text>
-
-              <View style={styles.monthYearContainer}>
-                <View style={styles.monthsContainer}>
-                  <Text style={styles.pickerLabel}>Месяц</Text>
-                  <ScrollView style={styles.pickerScroll}>
-                    {LocaleConfig.locales['ru'].monthNames.map((month, index) => (
-                      <TouchableOpacity
-                        key={month}
-                        style={[
-                          styles.pickerItem,
-                          tempDate.getMonth() === index && styles.pickerItemSelected
-                        ]}
-                        onPress={() => handleMonthSelect(index)}
-                      >
-                        <Text style={[
-                          styles.pickerItemText,
-                          tempDate.getMonth() === index && styles.pickerItemTextSelected
-                        ]}>
-                          {month}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </ScrollView>
+          <View style={styles.mainInfoContainer}>
+            <View style={styles.infoRowMain}>
+              <Text style={styles.labelMain}>Дата рождения:</Text>
+              <Controller
+                name={"birth_date"}
+                control={control}
+                render={({field: {onChange, onBlur, value}}) => (
+                  <TouchableOpacity onPress={() => {
+                    setActiveField('birth_date');
+                    setCurrentDate(value);
+                    setShowDatePicker(true);
+                  }}>
+                    <Text style={styles.valueMain}>{formatDate(value)}</Text>
+                  </TouchableOpacity>
+                )}
+              />
+            </View>
+            <View style={styles.infoRowMain}>
+              <Text style={styles.labelMain}>Начало работы:</Text>
+              <Controller
+                name={"start_date"}
+                control={control}
+                render={({field: {onChange, onBlur, value}}) => (
+                  <TouchableOpacity onPress={() => {
+                    setActiveField('start_date');
+                    setCurrentDate(value);
+                    setShowDatePicker(true);
+                  }}>
+                    <Text style={styles.valueMain}>{formatDate(value)}</Text>
+                  </TouchableOpacity>
+                )}
+              />
+            </View>
+            <View style={styles.infoRowMain}>
+              <Text style={styles.labelMain}>Пол:</Text>
+              <Controller
+                name={'gender'}
+                control={control}
+                render={({field: {onChange, onBlur, value}}) => (
+                  <TouchableOpacity onPress={() => setShowGenderPicker(true)}>
+                    <Text style={styles.valueMain}>{value == 'Мужчина' ? 'М' : 'Ж'}</Text>
+                  </TouchableOpacity>
+                )}
+              />
+            </View>
+          </View>
+          <View style={styles.lastVisitContainer}>
+            <Controller
+              name={'last_login'}
+              control={control}
+              render={({field: {onChange, onBlur, value}}) => (
+                <Text style={styles.lastVisitText}>Последнее посещение {value ?? '—'}</Text>
+              )}
+            />
+          </View>
+          <View style={styles.infoSection}>
+            <Controller
+              name={"phone_number"}
+              control={control}
+              render={({field: {onChange, onBlur, value}}) => (
+                <View style={styles.infoRow}>
+                  <Text style={styles.label}>Телефон</Text>
+                  <TextInput
+                    style={styles.infoRowIn}
+                    keyboardType={"numeric"}
+                    onChangeText={onChange}
+                    value={value}
+                  />
                 </View>
-
-                <View style={styles.yearsContainer}>
-                  <Text style={styles.pickerLabel}>Год</Text>
-                  <ScrollView style={styles.pickerScroll}>
-                    {YEARS.map(year => (
-                      <TouchableOpacity
-                        key={year}
-                        style={[
-                          styles.pickerItem,
-                          tempDate.getFullYear() === year && styles.pickerItemSelected
-                        ]}
-                        onPress={() => handleYearSelect(year)}
-                      >
-                        <Text style={[
-                          styles.pickerItemText,
-                          tempDate.getFullYear() === year && styles.pickerItemTextSelected
-                        ]}>
-                          {year}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </ScrollView>
-                </View>
-              </View>
-
-              <View style={styles.modalFooter}>
-                <TouchableOpacity onPress={handleMonthYearCancel}>
-                  <Text style={styles.modalButtonText}>Отмена</Text>
-                </TouchableOpacity>
-                <TouchableOpacity onPress={handleMonthYearConfirm}>
-                  <Text style={[styles.modalButtonText, { color: MainColors.pool_water }]}>OK</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
+              )}
+            />
+            <InfoRow control={control} field={"email"} title={"Email"}/>
+            <InfoRow control={control} field={"address"} title={"Адрес проживания"}/>
+            <InfoRow control={control} field={"job_title"} title={"Должность"}/>
+            <Text style={styles.label}>Область знаний</Text>
+            <Controller
+              name={'skills'}
+              control={control}
+              render={({field: {onChange, onBlur, value}}) => (
+                <Tags
+                  field={"skills"}
+                  setValue={setValueTags}
+                  tagsFromAPI={value.split(',')}
+                />
+              )}
+            />
+            <TouchableOpacity style={styles.statisticsButton}>
+              <Text style={styles.statisticsText}>Статистика работы</Text>
+              <MaterialIcons name="keyboard-arrow-right" size={35} color={TextColors.dire_wolf}/>
+            </TouchableOpacity>
+          </View>
+          <TouchableOpacity onPress={() => router.push(`/(password)/resetpass`)} style={styles.changePasswordButton}>
+            <Text style={styles.changePasswordText}>Изменить пароль</Text>
           </TouchableOpacity>
-        </Modal>
+        </ScrollView>
+      )}
 
-        <Modal
-          visible={showGenderPicker}
-          transparent
-          animationType="fade"
-          onRequestClose={() => setShowGenderPicker(false)}
-        >
-          <TouchableOpacity
-            style={styles.modalOverlay}
-            activeOpacity={1}
-            onPress={() => setShowGenderPicker(false)}
-          >
-            <View style={styles.modalContent}>
-              <Text style={styles.modalTitle}>Выберите пол:</Text>
-              <TouchableOpacity
-                style={[styles.modalOption, { borderBottomWidth: 1, borderBottomColor: TextColors.dim_gray }]}
-                onPress={() => handleGenderSelect('М')}
-              >
-                <Text style={styles.modalOptionText}>Мужской</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.modalOption}
-                onPress={() => handleGenderSelect('Ж')}
-              >
-                <Text style={styles.modalOptionText}>Женский</Text>
-              </TouchableOpacity>
-            </View>
-          </TouchableOpacity>
-        </Modal>
-      </ScrollView>
+      <DatePickerProfile
+        field={activeField}
+        showDatePicker={showDatePicker}
+        currentDate={currentDate}
+        handleDateChange={handleDateChange}
+        setShowDatePicker={changeShowPicker}
+      />
+
+      <GenderPickerProfile
+        showGenderPicker={showGenderPicker}
+        handleChangeProfileData={handleChangeProfileData}
+        setShowGenderPicker={changeShowPicker}
+      />
     </View>
   );
 };
@@ -451,6 +407,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginRight: 16,
   },
+  avatarImage: {
+    width: 120,
+    height: 120,
+  },
   avatarText: {
     fontSize: 48,
     color: TextColors.lunar_base,
@@ -478,6 +438,14 @@ const styles = StyleSheet.create({
   infoRow: {
     marginBottom: 16,
     textAlign: 'center',
+  },
+  infoRowIn: {
+    borderWidth: 1,
+    borderRadius: 5,
+    borderColor: MainColors.snowbank,
+    backgroundColor: MainColors.snowbank,
+    paddingHorizontal: 10,
+    fontFamily: 'Century-Regular'
   },
   label: {
     fontSize: 12,
@@ -559,127 +527,5 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: TextColors.dire_wolf,
     fontFamily: 'Century-Regular',
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  modalContent: {
-    backgroundColor: MainColors.white,
-    borderRadius: 8,
-    padding: 16,
-    width: '80%',
-  },
-  modalTitle: {
-    fontSize: 16,
-    color: TextColors.dire_wolf,
-    fontFamily: 'Century-Regular',
-    textAlign: 'center',
-    marginBottom: 16,
-  },
-  modalOption: {
-    paddingVertical: 12,
-  },
-  modalOptionText: {
-    fontSize: 16,
-    color: TextColors.dire_wolf,
-    fontFamily: 'Century-Regular',
-    textAlign: 'center',
-  },
-  calendarContainer: {
-    backgroundColor: MainColors.white,
-    borderRadius: 16,
-    padding: 16,
-    width: '90%',
-    maxWidth: 400,
-  },
-  calendarFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 16,
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: TextColors.dim_gray,
-  },
-  calendarButtonText: {
-    fontSize: 16,
-    color: TextColors.dire_wolf,
-    fontFamily: 'Century-Regular',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-  },
-  selectedDateText: {
-    fontSize: 14,
-    color: TextColors.dire_wolf,
-    fontFamily: 'Century-Regular',
-  },
-  calendarHeader: {
-    alignItems: 'center',
-    marginBottom: 16,
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: TextColors.dim_gray,
-  },
-  calendarTitle: {
-    fontSize: 18,
-    color: TextColors.dire_wolf,
-    fontFamily: 'Century-Regular',
-  },
-  monthYearContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 16,
-  },
-  monthsContainer: {
-    flex: 1,
-    marginRight: 8,
-  },
-  yearsContainer: {
-    flex: 1,
-    marginLeft: 8,
-  },
-  pickerLabel: {
-    fontSize: 14,
-    color: TextColors.dire_wolf,
-    fontFamily: 'Century-Regular',
-    marginBottom: 8,
-  },
-  pickerScroll: {
-    maxHeight: 200,
-  },
-  pickerItem: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 4,
-  },
-  pickerItemSelected: {
-    backgroundColor: MainColors.pool_water,
-  },
-  pickerItemText: {
-    fontSize: 16,
-    color: TextColors.dire_wolf,
-    fontFamily: 'Century-Regular',
-  },
-  pickerItemTextSelected: {
-    color: TextColors.snowbank,
-  },
-  modalFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 16,
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: TextColors.dim_gray,
-  },
-  modalButtonText: {
-    fontSize: 16,
-    color: TextColors.dire_wolf,
-    fontFamily: 'Century-Regular',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
   },
 });

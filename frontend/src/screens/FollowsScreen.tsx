@@ -6,6 +6,7 @@ import { Footer } from '@src/components/Footer'
 import { useUser } from '@src/api/users'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { ColleaguesItem } from '@src/components/ColleaguesItem'
+import { FailedLoadContent } from '@src/components/FailedLoadContent'
 
 export const FollowsScreen = () => {
   const [userId, setUserId] = useState<string>('')
@@ -31,7 +32,7 @@ export const FollowsScreen = () => {
     return () => { cancelled = true }
   }, [])
 
-  const { data, isLoading, isError, error, refetch } = useUser(userId)
+  const { data, isLoading, isError, error, refetch } = useUser(userId);
 
   return (
     <View style={styles.container}>
@@ -53,11 +54,9 @@ export const FollowsScreen = () => {
             <Text>Повторить</Text>
           </TouchableOpacity>
         </View>
-      ) : (
-        <View style={styles.failedContainer}>
-          {data?.message?.colleagues_count != null ?
+      ) : data?.colleagues_count != null ?
             <ScrollView style={styles.content}>
-              {data.message.colleagues_list.map((user, key) => (
+              {data.colleagues_list.map((user, key) => (
                 <ColleaguesItem
                   key={key}
                   user_id={user.user_id}
@@ -68,14 +67,7 @@ export const FollowsScreen = () => {
                   avatarPath={user.avatarPath}
                 />
               ))}
-            </ScrollView>
-
-            : <Text>К сожалению коллег найти не удалось.</Text>}
-          {/*<TouchableOpacity onPress={() => refetch()}>
-            <Text>Обновить</Text>
-          </TouchableOpacity>*/}
-        </View>
-      )}
+            </ScrollView> : <FailedLoadContent text={"К сожалению коллег найти не удалось"} />}
 
       <Footer/>
     </View>

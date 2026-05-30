@@ -1,33 +1,122 @@
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import React, { useState } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, Alert, ActivityIndicator } from 'react-native';
+import React, { useMemo, useRef } from 'react';
 import { EvilIcons, Ionicons } from '@expo/vector-icons';
 import { MainColors, TextColors } from '@/constants';
 import { router } from 'expo-router';
 import { Tab, TabsComponent } from '@/src/components/TabsComponent';
-import { TaskInfoTab } from '@/src/tabs/tasks/TaskInfoTab';
+import { TaskInfoTab, type TaskInfoTabRef } from '@/src/tabs/tasks/TaskInfoTab';
+import { useCollaborationRoom } from '@src/collab/useCollaborationRoom';
 import { TaskDescriptionTab } from '@/src/tabs/tasks/TaskDescriptionTab';
+import { useCurrentUserId } from '@src/hooks/useCurrentUserId';
+import { useCreateTask, useTask, useUpdateTask } from '@src/api/tasks';
+import { useUser } from '@src/api/users';
 
 type TaskMode = 'create' | 'view' | 'edit';
 
 interface TaskScreenProps {
+  mode: TaskMode;
   taskId?: string;
 }
 
-export const TaskScreen: React.FC<TaskScreenProps> = ({ taskId }) => {
-  const [mode, setMode] = useState<TaskMode>(taskId ? 'view' : 'create');
+export const TaskScreen: React.FC<TaskScreenProps> = ({ mode = 'edit', taskId }) => {
+  const userId = useCurrentUserId();
+  const taskRef = useRef<TaskInfoTabRef>(null);
+
+  const taskQuery = useTask({ user_id: userId ?? '', task_id: taskId ?? '' });
+  const { data: task, isLoading: taskLoading, isSuccess: taskLoaded } = taskQuery;
+
+  const collabEnabled = mode !== 'create' && !!taskId && !!userId && taskLoaded;
+  const collab = useCollaborationRoom(collabEnabled, {
+    userId: userId ?? '',
+    entityKind: 'task',
+    entityId: taskId ?? '',
+  });
+
+  const collaboration =
+    collabEnabled && userId ? { materialized: collab.materialized, pushWrite: collab.pushWrite } : undefined;
+
+  const { data: meData } = useUser(userId ?? '');
+  const colleagues = meData?.colleagues_list ?? [];
+
+  const activeEditorsByField = useMemo(() => {
+    if (!collabEnabled || !userId) return {};
+    const now = Date.now();
+    const cutoff = now - 5_000; // окно "кто сейчас редактирует"
+
+    const seenByField: Record<string, Set<string>> = {};
+
+    // store.writes — журнал последних операций LWW. По нему вычисляем активность.
+    const writes = (collab.store?.writes ?? []) as any[];
+    for (const w of writes) {
+      if (!w || typeof w.field !== 'string') continue;
+      if (typeof w.t !== 'number' || w.t < cutoff) continue;
+
+      const editorId = String(w.u ?? '');
+      if (!editorId || editorId === userId) continue;
+
+      if (!seenByField[w.field]) seenByField[w.field] = new Set();
+      seenByField[w.field].add(editorId);
+    }
+
+    const toName = (id: string) => {
+      const c = colleagues.find((x) => x.user_id === id);
+      const name = c
+        ? [c.first_name, c.middle_name, c.last_name].filter(Boolean).join(' ').trim()
+        : '';
+      return name || 'Пользователь';
+    };
+
+    const out: Record<string, string[]> = {};
+    for (const [field, idSet] of Object.entries(seenByField)) {
+      const names = Array.from(idSet).map(toName);
+      out[field] = Array.from(new Set(names));
+    }
+    return out;
+  }, [collabEnabled, userId, collab.store, collab.materialized, colleagues]);
+
+  const createTask = useCreateTask();
+  const updateTask = useUpdateTask();
 
   const handleBack = () => {
     router.back();
   };
 
-  const handleSave = () => {
-    // TODO: Сохранение задачи
-    router.back();
+  const handleSave = async () => {
+    if (!userId) {
+      Alert.alert('Ошибка', 'Не удалось определить пользователя');
+      return;
+    }
+    const payload = taskRef.current?.getSavePayload();
+    if (!payload) {
+      Alert.alert('Ошибка', 'Нет данных формы');
+      return;
+    }
+    try {
+      if (mode === 'create') {
+        payload.task.required_skills = `{${payload.task.required_skills.toString()}}`;
+        const created = await createTask.mutateAsync({
+          user_id: userId,
+          newTask: payload.task as any,
+          assignments: payload.assignmentUserIds,
+        });
+        router.replace(`/(tasks)/${created.task_id}` as any);
+      } else if (taskId) {
+        payload.task.required_skills = `{${payload.task.required_skills.toString()}}`;
+        await updateTask.mutateAsync({
+          user_id: userId,
+          task_id: taskId,
+          updates: payload.task as any,
+          assignments: payload.assignmentUserIds,
+        });
+        router.back();
+      }
+    } catch (e: any) {
+      const msg = e?.message ?? 'Не удалось сохранить';
+      Alert.alert('Ошибка', String(msg));
+    }
   };
 
-  const handleEdit = () => {
-    setMode('edit');
-  };
+  const saving = createTask.isPending || updateTask.isPending;
 
   return (
     <View style={styles.container}>
@@ -39,23 +128,34 @@ export const TaskScreen: React.FC<TaskScreenProps> = ({ taskId }) => {
           <Text style={styles.headerTitle}>Задача</Text>
         </View>
         <View style={styles.headerActions}>
-          <TouchableOpacity onPress={handleSave}>
-            <Ionicons name="checkmark" size={35} color={MainColors.pool_water} />
+          <TouchableOpacity onPress={handleSave} disabled={saving || (mode !== 'create' && taskLoading)}>
+            {saving ? (
+              <ActivityIndicator size="small" color={MainColors.pool_water} />
+            ) : (
+              <Ionicons name="checkmark" size={35} color={MainColors.pool_water} />
+            )}
           </TouchableOpacity>
         </View>
       </View>
-      <TabsComponent
-        activeTab={0}
-        onTabChange={(index) => { }}
-      >
-        <Tab
-          label="Свойства"
-        >
-          <TaskInfoTab mode={mode} />
+      <TabsComponent activeTab={0} onTabChange={() => {}}>
+        <Tab label="Свойства">
+          {mode !== 'create' && taskLoading ? (
+            <View style={styles.centered}>
+              <ActivityIndicator size="large" color={MainColors.pool_water} />
+            </View>
+          ) : (
+            <TaskInfoTab
+              ref={taskRef}
+              mode={mode}
+              task={task ?? null}
+              collaboration={collaboration}
+              colleagues={colleagues}
+              currentUserId={userId ?? ''}
+              activeEditorsByField={activeEditorsByField}
+            />
+          )}
         </Tab>
-        <Tab
-          label="Описание"
-        >
+        <Tab label="Описание">
           <TaskDescriptionTab />
         </Tab>
       </TabsComponent>
@@ -67,6 +167,12 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: MainColors.white,
+  },
+  centered: {
+    flex: 1,
+    padding: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   header: {
     flexDirection: 'row',
@@ -243,4 +349,4 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderRadius: 5,
   },
-}); 
+});

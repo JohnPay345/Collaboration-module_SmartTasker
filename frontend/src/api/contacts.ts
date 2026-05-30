@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '@src/services/axios';
+import { handleApiError } from '@src/services/errors';
 
 export interface Contact {
   contact_id: string;
@@ -25,24 +26,32 @@ export interface UpdateContactData extends Partial<CreateContactData> {
   contact_id: string;
 }
 
+type ApiEnvelope<T> = {
+  code: number;
+  url: string;
+  message: T;
+};
+
 export const useContacts = (user_id: string) => {
   return useQuery({
     queryKey: ['contacts', user_id],
     queryFn: async () => {
-      const { data } = await api.get<Contact[]>(`/contacts/${user_id}`);
-      return data;
+      const { data } = await api.get<ApiEnvelope<Contact[] | string>>(`/api/contacts/${user_id}`);
+      return Array.isArray(data.message) ? data.message : [];
     },
+    enabled: !!user_id,
   });
 };
 
-export const useContact = (contactId: string) => {
+export const useContact = (userId: string, contactId: string) => {
   return useQuery({
-    queryKey: ['contacts', contactId],
+    queryKey: ['contacts', userId, contactId],
     queryFn: async () => {
-      const { data } = await api.get<Contact>(`/contacts/${contactId}`);
-      return data;
+      const { data } = await api.get<ApiEnvelope<Contact[] | string>>(`/api/contacts/${userId}`);
+      const list = Array.isArray(data.message) ? data.message : [];
+      return list.find((c) => c.contact_id === contactId) ?? null;
     },
-    enabled: !!contactId,
+    enabled: !!userId && !!contactId,
   });
 };
 
@@ -50,12 +59,15 @@ export const useCreateContact = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (contactData: CreateContactData) => {
-      const { data } = await api.post<Contact>('/contacts', contactData);
-      return data;
+    mutationFn: async ({ user_id, contactData }: { user_id: string; contactData: CreateContactData }) => {
+      const { data } = await api.post<ApiEnvelope<Contact | string>>(`/api/contacts/${user_id}`, { data: contactData });
+      return data.message;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['contacts'] });
+    },
+    onError: (error) => {
+      throw handleApiError(error);
     },
   });
 };
@@ -64,13 +76,16 @@ export const useUpdateContact = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ contact_id, ...contactData }: UpdateContactData) => {
-      const { data } = await api.patch<Contact>(`/contacts/${contact_id}`, contactData);
-      return data;
+    mutationFn: async ({ user_id, contact_id, ...contactData }: UpdateContactData & { user_id: string }) => {
+      const { data } = await api.put<ApiEnvelope<Contact | string>>(`/api/contacts/${user_id}`, { data: { contact_id, ...contactData } });
+      return data.message;
     },
-    onSuccess: (_, { contact_id }) => {
+    onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['contacts'] });
-      queryClient.invalidateQueries({ queryKey: ['contacts', contact_id] });
+      queryClient.invalidateQueries({ queryKey: ['contacts', variables.user_id, variables.contact_id] });
+    },
+    onError: (error) => {
+      throw handleApiError(error);
     },
   });
 };
@@ -79,11 +94,14 @@ export const useDeleteContact = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (contactId: string) => {
-      await api.delete(`/contacts/${contactId}`);
+    mutationFn: async ({ user_id, contact_id }: { user_id: string; contact_id: string }) => {
+      await api.delete(`/api/contacts/${user_id}`, { data: { contact_id } });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['contacts'] });
     },
+    onError: (error) => {
+      throw handleApiError(error);
+    },
   });
-}; 
+};

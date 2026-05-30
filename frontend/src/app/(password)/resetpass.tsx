@@ -5,8 +5,6 @@ type ResetPassType = {
   screen: string;
 }
 
-export const ResetPassList: React.FC<ResetPassType> = ({screen = 'Login'}) => {
-  return (
-    <ResetPasswordScreen screen={screen} />
-  );
+export default function ResetPassList({screen = 'Login'}) {
+  return <ResetPasswordScreen screen={screen} />;
 };

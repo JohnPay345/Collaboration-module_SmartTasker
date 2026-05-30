@@ -8,6 +8,7 @@ export interface Task {
   task_name: string;
   description?: string;
   author_id: string;
+  author_name: string;
   project_id?: string;
   goal_id?: string;
   start_date: Date;
@@ -22,36 +23,59 @@ export interface Task {
   qualification_assessment: number;
   load_assessment: number;
   required_skills?: string[];
+  assignment_user_ids?: string[];
+  created_at?: Date;
+  updated_at?: Date;
 }
+
+type ApiEnvelope<T> = {
+  code: number;
+  url: string;
+  message: T;
+};
 
 export const useTasks = ({ user_id }: { user_id: string }) => {
   return useQuery({
     queryKey: ['tasks', user_id],
     queryFn: async () => {
       try {
-        const url = `/tasks/${user_id}/list`;
-        const { data } = await api.get<Task[]>(url);
-        return data;
+        const { data } = await api.get<ApiEnvelope<Task[]>>(`/api/tasks/${user_id}/list`);
+        return data.message ?? [];
       } catch (error) {
         throw handleApiError(error);
       }
     },
-    enabled: !user_id || !!user_id,
+    refetchInterval: 30000,
+    enabled: !!user_id,
   });
 };
 
-export const useTask = ({ user_id, task_id }: { user_id: string, task_id: string }) => {
+export const useProjectTasks = ({
+  user_id,
+  project_id,
+}: {
+  user_id: string;
+  project_id: string;
+}) => {
+  const query = useTasks({ user_id });
+  const data = (query.data ?? []).filter((t) => t.project_id === project_id);
+  return { ...query, data };
+};
+
+export const useTask = ({ user_id, task_id }: { user_id: string; task_id: string }) => {
   return useQuery({
     queryKey: ['tasks', user_id, 'task_id', task_id],
     queryFn: async () => {
       try {
-        const { data } = await api.get<Task>(`/tasks/${user_id}/${task_id}`);
-        return data;
+        const { data } = await api.get<ApiEnvelope<Task>>(`/api/tasks/${user_id}/${task_id}`);
+        return data.message;
       } catch (error) {
         throw handleApiError(error);
       }
     },
-    enabled: !!user_id,
+    enabled: !!user_id && !!task_id,
+    refetchInterval: 30000,
+    staleTime: 60_000,
     retry: (failureCount, error) => {
       if (error instanceof ApiException &&
         (error.code === ErrorCode.UNAUTHORIZED ||
@@ -67,10 +91,22 @@ export const useCreateTask = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ newTask, user_id }: { newTask: Omit<Task, 'task_id' | 'created_at' | 'updated_at'>, user_id: string }) => {
+    mutationFn: async ({
+      newTask,
+      user_id,
+      assignments,
+    }: {
+      newTask: Omit<Task, 'task_id' | 'created_at' | 'updated_at'>;
+      user_id: string;
+      assignments?: string[];
+    }) => {
       try {
-        const { data } = await api.post<Task>(`/tasks/${user_id}`, newTask);
-        return data;
+        const payload: { task: typeof newTask; assignments?: string[] } = { task: newTask };
+        if (assignments !== undefined && assignments.length) {
+          payload.assignments = assignments;
+        }
+        const { data } = await api.post<ApiEnvelope<Task>>(`/api/tasks/${user_id}`, { data: payload });
+        return data.message;
       } catch (error) {
         throw handleApiError(error);
       }
@@ -100,47 +136,33 @@ export const useUpdateTask = () => {
       user_id,
       task_id,
       updates,
-      type = 'general' // 'general' | 'status' | 'assign'
+      assignments,
     }: {
       user_id: string;
       task_id: string;
-      updates: Partial<Task> | { status: TaskStatus } | { assigneeId: string };
-      type?: 'general' | 'status' | 'assign';
+      updates: Partial<Task>;
+      assignments?: string[];
     }) => {
       try {
-        let endpoint = `/tasks/${task_id}/${user_id}`;
-        let payload = updates;
-
-        // Определяем эндпоинт и метод в зависимости от типа обновления
-        switch (type) {
-          case 'status':
-            endpoint = `/tasks/${task_id}/status`;
-            payload = { status: (updates as { status: TaskStatus }).status };
-            break;
-          case 'assign':
-            endpoint = `/tasks/${task_id}/assign`;
-            payload = { assigneeId: (updates as { assigneeId: string }).assigneeId };
-            break;
+        const payload: { task: Partial<Task>; assignments?: string[] } = { task: updates };
+        if (assignments !== undefined) {
+          payload.assignments = assignments;
         }
-
-        const { data } = await api.patch<Task>(endpoint, payload);
-        return data;
+        const { data } = await api.put<ApiEnvelope<Task>>(`/api/tasks/${user_id}/${task_id}`, { data: payload });
+        return data.message;
       } catch (error) {
         throw handleApiError(error);
       }
     },
-    onSuccess: (data) => {
-      // Обновляем данные в кэше
-      queryClient.setQueryData(['tasks', data.task_id], data);
-
-      // Инвалидируем списки задач
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: ['tasks', variables.user_id, 'task_id', variables.task_id],
+      });
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
-
-      // Если задача в проекте, обновляем список задач проекта
-      if (data.project_id) {
+      if (variables.updates.project_id) {
         queryClient.invalidateQueries({
-          queryKey: ['tasks', data.project_id],
-          exact: true
+          queryKey: ['tasks', variables.updates.project_id],
+          exact: true,
         });
       }
     },
@@ -160,16 +182,16 @@ export const useDeleteTask = () => {
   return useMutation({
     mutationFn: async ({ user_id, task_id }: { user_id: string, task_id: string }) => {
       try {
-        const { data } = await api.delete(`/tasks/${user_id}/${task_id}`);
-        return data;
+        const { data } = await api.delete<ApiEnvelope<string>>(`/api/tasks/${user_id}/${task_id}`);
+        return data.message;
       } catch (error) {
         throw handleApiError(error);
       }
     },
-    onSuccess: (task_id) => {
-      queryClient.removeQueries({ queryKey: ['tasks', task_id] });
+    onSuccess: (_, variables) => {
+      queryClient.removeQueries({ queryKey: ['tasks', variables.task_id] });
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
-      const task = queryClient.getQueryData<Task>(['tasks', task_id]);
+      const task = queryClient.getQueryData<Task>(['tasks', variables.task_id]);
       if (task?.project_id) {
         queryClient.invalidateQueries({
           queryKey: ['tasks', task.project_id],

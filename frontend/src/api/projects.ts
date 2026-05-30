@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '@/src/services/axios';
-import { GoalStatus, ProjectStatus } from '@/src/types/statuses';
+import { ProjectStatus } from '@/src/types/statuses';
 import { handleApiError, ApiException, ErrorCode } from '@src/services/errors';
 
 export interface Projects {
@@ -14,35 +14,56 @@ export interface Projects {
   }[]
 }
 
+export type ProjectGoal = {
+  project_goal_id: string;
+  goal_name: string;
+  goal_description?: string;
+  target_date: Date;
+  goal_status: string;
+};
+
 export interface Project {
   project_id: string;
   project_name: string;
-  project_description?: string;
+  description?: string;
   start_date: Date;
   end_date: Date;
   status: ProjectStatus;
   author_id: string;
   tags?: string[];
-  project_goal_id: string;
-  goal_name: string;
-  goal_description?: string;
-  target_date: Date;
-  goal_status: GoalStatus;
-  project_assignment_id: string;
-  user_id: string;
+  assignment_user_ids?: string[];
+  created_at?: Date;
+  updated_at?: Date;
+  goals?: ProjectGoal[];
+  assignments?: { project_assignment_id?: string; user_id: string }[];
 }
+
+export type CreateProjectInput = Pick<
+  Project,
+  'project_name' | 'description' | 'status' | 'author_id' | 'start_date' | 'end_date'
+> & {
+  tags?: string[];
+};
+
+type ApiEnvelope<T> = {
+  code: number;
+  url: string;
+  message: T;
+};
 
 export const useProjects = (user_id: string) => {
   return useQuery({
     queryKey: ['projects', user_id],
     queryFn: async () => {
       try {
-        const { data } = await api.get<Projects>(`/projects/${user_id}/list`);
-        return data;
+        const { data } = await api.get<ApiEnvelope<Projects | Project[]>>(`/api/projects/${user_id}/list`);
+        return data.message;
       } catch (error) {
         throw handleApiError(error);
       }
     },
+    refetchInterval: 30000,
+    enabled: !!user_id,
     retry: (failureCount, error) => {
       if (error instanceof ApiException &&
         (error.code === ErrorCode.UNAUTHORIZED ||
@@ -54,19 +75,27 @@ export const useProjects = (user_id: string) => {
   });
 };
 
-export const useProject = ({ user_id, project_id }: { user_id: string, project_id: string }) => {
+export const useProject = ({ user_id, project_id }: { user_id: string; project_id: string }) => {
   return useQuery({
     queryKey: ['projects', user_id, 'project_id', project_id],
     queryFn: async () => {
       try {
-        const { data } = await api.get<Project>(`/projects/${user_id}/${project_id}`);
-        return data;
+        const { data } = await api.get<ApiEnvelope<Project[]>>(`/api/projects/${user_id}/${project_id}`);
+        const row = data.message[0];
+        if (!row) return undefined;
+        const raw = row.assignments;
+        const assignment_user_ids = Array.isArray(raw)
+          ? (raw.map((a: { user_id?: string }) => a?.user_id).filter(Boolean) as string[])
+          : [];
+        return { ...row, assignment_user_ids } as Project;
       } catch (error) {
         console.log(error);
         throw handleApiError(error);
       }
     },
-    enabled: !!user_id,
+    enabled: !!user_id && !!project_id,
+    refetchInterval: 30000,
+    staleTime: 60_000,
     retry: (failureCount, error) => {
       if (error instanceof ApiException &&
         (error.code === ErrorCode.UNAUTHORIZED ||
@@ -82,16 +111,29 @@ export const useCreateProject = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ user_id, newProject }: { user_id: string, newProject: Omit<Project, 'project_id' | 'created_at' | 'updated_at'> }) => {
+    mutationFn: async ({
+      user_id,
+      newProject,
+      assignments,
+    }: {
+      user_id: string;
+      newProject: CreateProjectInput;
+      assignments?: string[];
+    }) => {
       try {
-        const { data } = await api.post<Project>(`/projects/${user_id}`, newProject);
-        return data;
+        const payload: { project: typeof newProject; assignments?: string[] } = { project: newProject };
+        if (assignments !== undefined && assignments.length) {
+          payload.assignments = assignments;
+        }
+        const { data } = await api.post<ApiEnvelope<Project>>(`/api/projects/${user_id}`, { data: payload });
+        return data.message;
       } catch (error) {
         throw handleApiError(error);
       }
     },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['projects', data.project_id] });
+    onSuccess: (_data, vars) => {
+      queryClient.invalidateQueries({ queryKey: ['projects', vars.user_id] });
+      queryClient.invalidateQueries({ queryKey: ['projects'] });
     },
     onError: (error: ApiException) => {
       if (error.code === ErrorCode.VALIDATION_ERROR) {
@@ -105,16 +147,32 @@ export const useUpdateProject = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ user_id, project_id, ...project }: Partial<Project> & { user_id: string, project_id: string }) => {
+    mutationFn: async ({
+      user_id,
+      project_id,
+      project,
+      assignments,
+    }: {
+      user_id: string;
+      project_id: string;
+      project: Partial<Project>;
+      assignments?: string[];
+    }) => {
       try {
-        const { data } = await api.patch<Project>(`/projects/${project_id}`, project);
-        return data;
+        const payload: { project: Partial<Project>; assignments?: string[] } = { project };
+        if (assignments !== undefined) {
+          payload.assignments = assignments;
+        }
+        const { data } = await api.put<ApiEnvelope<Project>>(`/api/projects/${user_id}/${project_id}`, { data: payload });
+        return data.message;
       } catch (error) {
         throw handleApiError(error);
       }
     },
-    onSuccess: (data) => {
-      queryClient.setQueryData(['projects', data.project_id], data);
+    onSuccess: (_data, vars) => {
+      queryClient.invalidateQueries({
+        queryKey: ['projects', vars.user_id, 'project_id', vars.project_id],
+      });
       queryClient.invalidateQueries({ queryKey: ['projects'] });
     },
   });
@@ -126,14 +184,14 @@ export const useDeleteProject = () => {
   return useMutation({
     mutationFn: async ({ user_id, project_id }: { user_id: string, project_id: string }) => {
       try {
-        const { data } = await api.delete(`/projects/${user_id}/${project_id}`);
-        return data;
+        const { data } = await api.delete<ApiEnvelope<string>>(`/api/projects/${user_id}/${project_id}`);
+        return data.message;
       } catch (error) {
         throw handleApiError(error);
       }
     },
-    onSuccess: (project_id) => {
-      queryClient.removeQueries({ queryKey: ['projects', project_id] });
+    onSuccess: (_, variables) => {
+      queryClient.removeQueries({ queryKey: ['projects', variables.project_id] });
       queryClient.invalidateQueries({ queryKey: ['projects'] });
     },
     onError: (error: ApiException) => {

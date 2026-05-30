@@ -2,39 +2,51 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '@/src/services/axios';
 import { handleApiError, ApiException, ErrorCode } from '@src/services/errors';
 
-interface Response {
-  code: string;
+interface Response<T> {
+  code: number;
   url: string;
+  message: T;
 }
 
-export interface User extends Response {
+export interface User {
   user_id: string;
   first_name: string;
   middle_name: string;
   last_name?: string;
   email: string;
   phone_number?: string;
-  password: string;
   birth_date: Date;
   start_date: Date;
   gender: 'Мужчина' | 'Женщина';
   address?: string;
   job_title: string;
-  avatarPath: string;
+  avatarpath: string;
+  last_login?: Date;
+  skills?: string[];
+}
+
+interface Collegues {
+  user_id: string;
+  first_name: string;
+  middle_name: string;
+  last_name?: string;
+  email: string;
+  phone_number?: string;
+  birth_date: Date;
+  start_date: Date;
+  gender: 'Мужчина' | 'Женщина';
+  address?: string;
+  job_title: string;
+  avatarpath: string;
   last_login?: Date;
   skills?: string[];
   created_user_id?: string;
-  created_at: Date;
-  updated_at: Date;
+  colleagues_list: User[];
+  colleagues_count: number;
+  connections_status?: string;
 }
 
-interface Collegues extends User, Response {
-  message: {
-    colleagues_list: User[];
-    colleagues_count: number;
-    connections_status?: string;
-  }
-}
+export type UserWithColleaguesApiResponse = Response<Collegues>;
 
 export interface AuthResponse {
   code: string;
@@ -74,9 +86,8 @@ export const useUsers = () => {
     queryKey: ['users'],
     queryFn: async () => {
       try {
-        console.log('asdf')
-        const { data } = await api.get<User[]>('/api/users');
-        return data;
+        const { data } = await api.get<UserWithColleaguesApiResponse & { message: User[] }>('/api/users');
+        return data.message;
       } catch (error) {
         console.error(error);
         throw handleApiError(error);
@@ -90,8 +101,8 @@ export const useUser = (id: string) => {
     queryKey: ['users', id],
     queryFn: async () => {
       try {
-        const { data } = await api.get<Collegues>(`/api/users/${id}`);
-        return data;
+        const { data } = await api.get<UserWithColleaguesApiResponse>(`/api/users/${id}`);
+        return data.message;
       } catch (error) {
         throw handleApiError(error);
       }
@@ -130,7 +141,7 @@ export const useRegister = () => {
   return useMutation({
     mutationFn: async (userData: RegisterData) => {
       try {
-        const { data } = await api.post<AuthResponse>('/register', userData);
+        const { data } = await api.post<AuthResponse>('/api/register', userData);
         return data;
       } catch (error) {
         throw handleApiError(error);
@@ -170,12 +181,11 @@ export const useUpdateProfile = () => {
           formData.append('avatar', avatarFile);
         }
 
-        const { data } = await api.put<User>(`/users/${user_id}`, formData, {
+        const { data } = await api.put<User>(`/api/users/${user_id}`, formData, {
           headers: {
             'Content-Type': 'multipart/form-data',
           },
         });
-
         return data;
       } catch (error) {
         throw handleApiError(error);

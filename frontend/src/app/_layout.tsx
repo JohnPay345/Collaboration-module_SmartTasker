@@ -6,8 +6,12 @@ import { View, Text, StyleSheet } from 'react-native';
 import { MainColors, TextColors } from '@/constants';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthGuard } from '@src/components/AuthGuard';
-import { ConnectChatWebSocket } from '@src/components/ConnectChatWebSocket';
+import { ConnectChatWebSocket } from '@src/context/ConnectChatWebSocket';
+import { RegisterPushToken } from '@src/components/RegisterPushToken';
 import { ProjectsProvider } from '@src/context/ProjectsContext';
+import { NotificationsProvider } from '@src/context/NotificationsContext';
+import { InAppNotificationToast } from '@src/components/InAppNotification';
+import { configurePushNotificationHandler } from '@src/services/pushNotifications';
 import { DevToolsBubble } from 'react-native-react-query-devtools';
 import { useState } from 'react';
 
@@ -40,14 +44,21 @@ const Screens = () => {
         <Stack.Screen name='(projects)/[project_id]' options={{title: 'Проект',}}/>
         <Stack.Screen name='(projects)/create' options={{title: 'Создание проекта',}}/>
         <Stack.Screen name='profile' options={{title: 'Профиль',}}/>
-        <Stack.Screen name='settings' options={{title: 'Настройки',}}/>
+        <Stack.Screen name='(settings)/settings' options={{title: 'Настройки',}}/>
+        <Stack.Screen name='(settings)/main_settings' options={{title: 'Основные настройки'}}/>
+        <Stack.Screen name='(settings)/notifications_settings' options={{title: 'Настройки уведомлений'}}/>
         <Stack.Screen name="inbox" options={{title: 'Уведомления'}}/>
+        <Stack.Screen name="filter" options={{title: 'Фильтр'}}/>
+        <Stack.Screen name="(password)/resetpass" options={{title: 'Сброс пароля'}}/>
+        <Stack.Screen name="(password)/checkpass" options={{title: 'Проверка паролем'}}/>
         <Stack.Screen name="(follows)/follows" options={{title: 'Коллеги'}}/>
         <Stack.Screen name="(follows)/[follow_id]" options={{title: 'Коллега'}}/>
       </Stack>
     </>
   )
 }
+
+configurePushNotificationHandler();
 
 export default function RootLayout() {
   const [queryClient] = useState(makeQueryClient);
@@ -66,8 +77,12 @@ export default function RootLayout() {
       <ThemeProvider>
         <SettingsProvider>
           <ProjectsProvider>
-            <ConnectChatWebSocket />
-            <Screens />
+            <NotificationsProvider>
+              <Screens />
+              <ConnectChatWebSocket />
+              <RegisterPushToken />
+              <InAppNotificationToast />
+            </NotificationsProvider>
           </ProjectsProvider>
         </SettingsProvider>
       </ThemeProvider>

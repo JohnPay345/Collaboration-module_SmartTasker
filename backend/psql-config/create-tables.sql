@@ -111,6 +111,7 @@ CREATE TABLE IF NOT EXISTS user_notifications_settings(
   notifications_settings_tasks JSONB DEFAULT '{
     "task.created": true,
     "task.updated": true,
+    "task.deleted": true,
     "task.completed": true,
     "task.assigned": true,
     "task.unassigned": true,
@@ -127,6 +128,7 @@ CREATE TABLE IF NOT EXISTS user_notifications_settings(
     "project.completed": true,
     "project.assigned": true,
     "project.unassigned": true,
+    "project.deleted": true,
     "project.goal_completed": true,
     "project.goals": true,
     "project.status_changed": true,

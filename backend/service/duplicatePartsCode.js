@@ -4,6 +4,8 @@ export const replyResult = (result, req, rep) => {
       return rep.code(200).send({ code: 200, url: req.url, message: result.result });
     case "errorMsg":
       return rep.code(400).send({ code: 400, url: req.url, message: result.errorMsg });
+    case "isNotUser":
+      return rep.code(403).send({ code: 403, url: req.url, message: result.errorMsg });
     default: {
       return rep.code(500).send({ code: 500, url: req.url, message: "An unpredictable error" });
     }
@@ -76,6 +78,7 @@ export const selectDataInTable = async (options) => {
       table,
       columns = ['*'],
       where,
+      logicOperator = "AND",
       orderBy,
       orderDirection = 'ASC',
       limit,
@@ -153,7 +156,7 @@ export const selectDataInTable = async (options) => {
         }
       }
       if (whereClauses.length > 0) {
-        whereClause = ' WHERE ' + whereClauses.join(' AND ');
+        whereClause = ' WHERE ' + whereClauses.join(` ${logicOperator} `);
         sql += whereClause;
       }
     }

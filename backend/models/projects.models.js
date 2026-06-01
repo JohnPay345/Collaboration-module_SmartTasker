@@ -3,6 +3,7 @@ import { evaluate } from "mathjs";
 import { pool } from "#root/service/connection.js";
 import { insertDataInTable, selectDataInTable, updateDataInTable, checkUserExist } from "#root/service/duplicatePartsCode.js";
 import { publishMessage } from "#rmq/publisher.js";
+import { UserModel } from "#models/user.model.js";
 
 config();
 
@@ -25,10 +26,24 @@ function pickProjectFields(project) {
 export const ProjectsModel = {
   getProjects: async (userId) => {
     try {
+      const getUser = await UserModel.getUserByIsUser(userId);
+      if(getUser.type == "errorMsg") {
+        return { type: "isNotUser", errorMsg: "The user is not allowed to" }
+      }
+
       const getProjectOptions = {
-        table: "projects",
-        columns: ["project_id", "project_name", "description", "status", "author_id"],
-        where: { "author_id": userId }
+        table: [["projects", "p"]],
+        columns: ["DISTINCT p.project_id", "p.project_name", "p.description", "p.status", "p.author_id"],
+        join: [
+          {
+            table: [["project_assignments", "pa"]],
+            type: "LEFT JOIN",
+            on: "p.project_id = pa.project_id"
+          }
+        ],
+        where: { "p.author_id": userId, "pa.user_id": userId },
+        logicOperator: "OR",
+        groupBy: ["p.project_id"]
       }
       const sql = await selectDataInTable(getProjectOptions);
       if (sql.type == "Error") {
@@ -178,7 +193,7 @@ export const ProjectsModel = {
               }
             }
           }
-          publishMessage("project", "project.assigned", notificationData);
+          await publishMessage("project", "project.assigned", notificationData);
           if (!resultProjectAssignments.rows.length) {
             console.error("Error when insert data to project_assignments table", resultProjectAssignments);
             throw new Error("Error when insert data to project_assignments table");
@@ -353,6 +368,7 @@ export const ProjectsModel = {
         }
         publishMessage("project", "project.deleted", notificationData);
       }
+      await pool.query("COMMIT");
       return { type: "result", result: result.rows[0] };
     } catch (error) {
       await pool.query("ROLLBACK");

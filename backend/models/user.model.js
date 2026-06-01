@@ -222,6 +222,18 @@ export const UserModel = {
       return { type: "errorMsg", errorMsg: "Error in Model updateTokens" };
     }
   },
+  getUserByIsUser: async(userId) => {
+    try {
+      const isUser = await pool.query("SELECT user_id FROM users WHERE user_id = $1", [userId]);
+      if(!isUser.rows[0].user_id) {
+        return { type: "errorMsg", errorMsg: "User is not found" }
+      } else {
+        return { type: "result", result: { user_id: isUser.rows[0].user_id } }
+      }
+    } catch(e) {
+      return { type: "errorMsg", errorMsg: "Error in Model getUserByIsUser" };
+    }
+  },
   // TODO: getUserStats, getUserRecentActivity, getUserPerformance привести к одной фукнции
   // Получение статистики пользователя
   getUserStats: async (userId) => {

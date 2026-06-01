@@ -2,26 +2,40 @@ import { config } from "dotenv";
 import { pool } from "#root/service/connection.js";
 import { insertDataInTable, selectDataInTable, updateDataInTable } from "#root/service/duplicatePartsCode.js";
 import { publishMessage } from "#rmq/publisher.js";
+import { UserModel } from "#models/user.model.js";
 
 config();
 
 export const TasksModel = {
   getTasksByUserId: async (userId) => {
     try {
+      const getUser = await UserModel.getUserByIsUser(userId);
+      if(getUser.type == "errorMsg") {
+        return { type: "isNotUser", errorMsg: "The user is not allowed to" }
+      }
+
       const options = {
         table: [
           ["tasks", "t"]
         ],
-        columns: ["t.task_id", "t.task_name", "t.description", "t.author_id", "CONCAT(u.first_name, ' ', u.middle_name, ' ', u.last_name) AS author_name", "t.project_id",
+        columns: ["DISTINCT t.task_id", "t.task_name", "t.description", "t.author_id", "CONCAT(u.first_name, ' ', u.middle_name, ' ', u.last_name) AS author_name", "t.project_id",
           "t.start_date", "t.end_date", "t.status", "t.is_urgent", "t.priority",
           "t.value", "t.effort", "t.estimated_duration", "t.priority_assessment",
           "t.qualification_assessment", "t.load_assessment", "t.required_skills",
           "t.created_at", "t.updated_at"],
-        join: [{
-          table: [["users", "u"]],
-          type: "LEFT JOIN",
-          on: "t.author_id = u.user_id"
-        }],
+        join: [
+          {
+            table: [["users", "u"]],
+            type: "LEFT JOIN",
+            on: "t.author_id = u.user_id"
+          },
+          {
+            table: [["task_assignments", "ta"]],
+            type: "LEFT JOIN",
+            on: "t.author_id = ta.user_id"
+          }
+        ],
+        logicOperator: "OR",
         where: { "t.author_id": userId }
       }
       const sql = await selectDataInTable(options);

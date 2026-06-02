@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { getYjsDoc } from '@syncedstore/core';
 import { createCollabStore, type CollabStore } from './collabStore';
 import { bindCollabWebSocket } from './collabWebSocket';
-import { materializeWrites, type CollabWrite } from './lwwMaterialize';
+import { materializeWrites } from './lwwMaterialize';
 
 export type CollaborationParams = {
   userId: string;
@@ -31,15 +31,15 @@ export function useCollaborationRoom(enabled: boolean, params: CollaborationPara
     return bindCollabWebSocket(store, params);
   }, [enabled, params.userId, params.entityKind, params.entityId, store]);
 
-  const materialized = materializeWrites(store.writes as readonly CollabWrite[]);
+  const materialized = materializeWrites(store.writes);
 
   const pushWrite = (field: string, v: unknown) => {
-    store.writes.push({value: {
-        field,
-        v,
-        t: Date.now(),
-        u: params.userId,
-    }});
+    store.writes.push({
+      field,
+      v,
+      t: Date.now(),
+      u: params.userId,
+    });
   };
 
   return { store, materialized, pushWrite };

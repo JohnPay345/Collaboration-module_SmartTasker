@@ -6,12 +6,14 @@ import type { CollabStore } from './collabStore';
 const WS_BASE = BASE_URL.replace(/^http/, 'ws');
 
 function uint8ToArrayBuffer(u8: Uint8Array): ArrayBuffer {
-  return u8.buffer.slice(u8.byteOffset, u8.byteOffset + u8.byteLength);
+  const buf = new ArrayBuffer(u8.byteLength);
+  new Uint8Array(buf).set(u8);
+  return buf;
 }
 
 /**
  * Провайдер синхронизации: сервер шлёт полный state при connect,
- * далее — бинарные дельты Yjs.
+ * далее — бинарные дельты Yjs. Дельты до onopen буферизуются.
  */
 export function bindCollabWebSocket(
   store: CollabStore,
@@ -22,17 +24,48 @@ export function bindCollabWebSocket(
   const ws = new WebSocket(url);
   ws.binaryType = 'arraybuffer';
 
-  const onDocUpdate = (update: Uint8Array, origin: unknown) => {
-    if (origin === 'collab-remote') return;
-    if (ws.readyState !== WebSocket.OPEN) return;
-    try {
-      ws.send(uint8ToArrayBuffer(update));
-    } catch (e) {
-      console.error('collab ws send', e);
+  const pending: Uint8Array[] = [];
+  let droppedWhileClosed = 0;
+
+  const sendUpdate = (update: Uint8Array) => {
+    if (ws.readyState === WebSocket.OPEN) {
+      try {
+        ws.send(uint8ToArrayBuffer(update));
+      } catch (e) {
+        console.error('[collab] ws send failed', e);
+      }
+      return;
+    }
+    if (ws.readyState === WebSocket.CONNECTING) {
+      pending.push(update);
+      return;
+    }
+    droppedWhileClosed += 1;
+  };
+
+  const flushPending = () => {
+    while (pending.length > 0 && ws.readyState === WebSocket.OPEN) {
+      const update = pending.shift()!;
+      try {
+        ws.send(uint8ToArrayBuffer(update));
+      } catch (e) {
+        console.error('[collab] ws flush send failed', e);
+        break;
+      }
     }
   };
 
+  const onDocUpdate = (update: Uint8Array, origin: unknown) => {
+    if (origin === 'collab-remote') return;
+    sendUpdate(update);
+  };
+
   doc.on('update', onDocUpdate);
+
+  ws.onopen = () => {
+    console.log(`[collab] ws open ${params.entityKind}/${params.entityId}`);
+    flushPending();
+  };
 
   ws.onmessage = (ev) => {
     try {
@@ -40,12 +73,21 @@ export function bindCollabWebSocket(
       const u8 = new Uint8Array(data);
       Y.applyUpdate(doc, u8, 'collab-remote');
     } catch (e) {
-      console.error('collab ws message', e);
+      console.error('[collab] ws message apply failed', e);
     }
   };
 
-  ws.onerror = () => {
-    /* RN / web часто без полезного payload */
+  ws.onerror = (ev) => {
+    console.warn('[collab] ws error', params.entityKind, params.entityId, ev);
+  };
+
+  ws.onclose = (ev) => {
+    if (pending.length > 0 || droppedWhileClosed > 0) {
+      console.warn(
+        `[collab] ws closed code=${ev.code} pending=${pending.length} dropped=${droppedWhileClosed}`
+      );
+    }
+    pending.length = 0;
   };
 
   return () => {

@@ -1,5 +1,5 @@
-# Используем образ линукс Alpine с версией node 14
-FROM node:24-alpine3.22
+# === Этап 1: Сборка зависимостей ===
+FROM node:24-alpine3.22 AS builder
 
 # Указываем нашу рабочую директорию
 WORKDIR /web-api
@@ -24,10 +24,36 @@ COPY . .
 # Сборка приложения в /dist
 RUN npm run build:prod
 
+# === Этап 2: Минимальный образ ===
+FROM node:24-alpine3.22 AS runner
+
+# Указываем нашу рабочую директорию
+WORKDIR /web-api
+
+# Устанавливаем NODE_ENV
+ENV NODE_ENV=production
+
+# Копируем package*.json файлы
+COPY package*.json ./
+
+RUN set -e; \
+  max=5; i=0; \
+  until [ $i -ge $max ]; do \
+    npm ci --only=production --prefer-offline --no-audit --progress=false && break; \
+    i=$((i+1)); \
+    echo "npm install failed, attempt $i/$max. sleeping $((i*5))s..."; \
+    sleep $((i*5)); \
+  done; \
+  if [ $i -ge $max ]; then echo "npm ci failed after $max attempts" && exit 1; fi
+
+COPY --from=builder /web-api/dist ./dist
+COPY --from=builder /web-api/uploads ./uploads
+COPY --from=builder /web-api/utils/load-secrets.js ./load-secrets.js
+
 # Открыть порт в нашем контейнер
 EXPOSE 8080
 
 # Запускаем наш сервер
-CMD ["npm", "start"]
+CMD ["node", "--import", "./load-secrets.js", "./dist/index.js"]
 
 VOLUME /web-api

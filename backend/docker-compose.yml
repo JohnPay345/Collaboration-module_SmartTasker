@@ -1,10 +1,27 @@
 version: "3.9"
+
+secrets:
+  psql_root_user_pass:
+    file: ./secrets/psql_root_user_pass
+  redis_pass:
+    file: ./secrets/redis_pass
+  rm_user:
+    file: ./secrets/rm_user
+  rm_pass:
+    file: ./secrets/rm_pass
+  app_env_file:
+    file: ./.env.production
+
 services:
   web-api:
     build:
       context: .  # Директория, содержащая Dockerfile
       dockerfile: Dockerfile-Node
     container_name: "web-api"
+    secrets:
+      - source: app_env_file
+        target: app_env_file
+        mode: 0400
     ports:
       - '8080:8080'
     depends_on:
@@ -13,6 +30,7 @@ services:
       - redis
     volumes:
       - app_data:/web-api
+      - shared_uploads:/web-api/uploads
     networks:
       - my_network
     
@@ -25,8 +43,12 @@ services:
       - '5432:5432'
     environment:
       POSTGRES_USER: ST_c&Rsov@aya789
-      POSTGRES_PASSWORD: A@RlZlMr*tNtgvrmri
+      POSTGRES_PASSWORD_FILE: /run/secrets/psql_root_user_pass
       POSTGRES_DB: root_db
+    secrets:
+      - source: psql_root_user_pass
+        target: psql_root_user_pass
+        mode: 0400
     volumes:
       - db_data:/var/lib/postgresql/data
     networks:
@@ -38,7 +60,11 @@ services:
     hostname: redis
     ports:
       - "6379:6379"
-    command: redis-server --requirepass root_p@ss007d
+    command: [ "sh", "-c", "redis-server --requirepass $$(cat /run/secrets/redis_pass)" ]
+    secrets:
+      - source: redis_pass
+        target: redis_pass
+        mode: 0400
     volumes:
       - rs_data:/rs_data
     networks:
@@ -51,9 +77,19 @@ services:
     ports:
       - '15672:15672'
       - '5672:5672'
-    environment:
-      RABBITMQ_DEFAULT_USER: rmuser
-      RABBITMQ_DEFAULT_PASS: rmpassword
+    entrypoint: >
+      sh -c "
+      export RABBITMQ_DEFAULT_USER=\$$(cat /run/secrets/rm_user) &&
+      export RABBITMQ_DEFAULT_PASS=\$$(cat /run/secrets/rm_pass) &&
+      exec docker-entrypoint.sh rabbitmq-server
+      "
+    secrets:
+      - source: rm_user
+        target: rm_user
+        mode: 0400
+      - source: rm_pass
+        target: rm_pass
+        mode: 0400
     volumes:
       - rm_data:/var/lib/rabbitmq
     networks:
@@ -72,25 +108,16 @@ services:
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./nginx/certs:/etc/nginx/ssl
+      - shared_uploads:/web-api/uploads:ro 
     networks:
       - my_network
-
-#  certbot:
-#    image: certbot/certbot
-#    container_name: my_certbot
-#    volumes:
-#      - ./nginx/certs:/etc/letsencrypt
-#      - /var/log/letsencrypt:/var/log/letsencrypt
-#      - /etc/letsencrypt/renewal:/etc/letsencrypt/renewal
-#    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew --nginx; sleep 12h & wait $${!}; done;'"
-#    depends_on:
-#      - nginx
 
 volumes:
   db_data:
   app_data:
   rm_data:
   rs_data:
+  shared_uploads:
 
 networks:
   my_network:

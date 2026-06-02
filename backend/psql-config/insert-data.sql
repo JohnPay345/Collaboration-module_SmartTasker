@@ -1,3 +1,6 @@
+-- Подключение к БД от worker1
+\c "smartTasker" "worker1"
+
 -- Вставка данных в таблицу users
 INSERT INTO users (first_name, middle_name, last_name, email, phone_number, password, birth_date, start_date, gender, address, job_title, avatarPath, skills, created_user_id, created_at, updated_at) VALUES
 ('Иван', 'Иванович', 'Петров', 'ivan.petrov@example.com', '+79123456789', crypt('password123', gen_salt('bf')), '1990-05-15', '2020-01-10', 'Мужчина',

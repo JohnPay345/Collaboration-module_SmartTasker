@@ -7,32 +7,11 @@ import { useUser } from '@src/api/users'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { ColleaguesItem } from '@src/components/ColleaguesItem'
 import { FailedLoadContent } from '@src/components/FailedLoadContent'
+import { useCurrentUserId } from '@src/hooks/useCurrentUserId'
 
 export const FollowsScreen = () => {
-  const [userId, setUserId] = useState<string>('')
-
-  useEffect(() => {
-    let cancelled = false
-    const loadUserId = async () => {
-      const currentUser = await AsyncStorage.getItem('user_data')
-      if (cancelled) return
-      if (currentUser != null) {
-        try {
-          const parsed = JSON.parse(currentUser)
-          const id = parsed?.message?.user_id ?? ''
-          setUserId(id)
-        } catch {
-          setUserId('')
-        }
-      } else {
-        setUserId('')
-      }
-    }
-    loadUserId()
-    return () => { cancelled = true }
-  }, [])
-
-  const { data, isLoading, isError, error, refetch } = useUser(userId);
+  const userId = useCurrentUserId();
+  const { data, isLoading, isError, error, refetch } = useUser(userId ?? '');
 
   return (
     <View style={styles.container}>
@@ -62,7 +41,7 @@ export const FollowsScreen = () => {
                   user_id={user.user_id}
                   first_name={user.first_name}
                   middle_name={user.middle_name}
-                  last_name={user.middle_name}
+                  last_name={user.last_name}
                   job_title={user.job_title}
                   avatarPath={user.avatarPath}
                 />

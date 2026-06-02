@@ -30,18 +30,31 @@ const PROJECT_SYNC_FIELDS = [
   'tags',
 ];
 
+/** Плоский { field, v, t, u } и legacy { value: { … } } из syncedstore. */
+export function normalizeWriteEntry(raw) {
+  const e = raw instanceof Y.AbstractType ? raw.toJSON() : raw;
+  if (!e || typeof e !== 'object') return null;
+  const inner =
+    e.value && typeof e.value === 'object' && typeof e.value.field === 'string' ? e.value : e;
+  if (typeof inner.field !== 'string') return null;
+  return {
+    field: inner.field,
+    v: inner.v,
+    t: Number(inner.t) || 0,
+    u: String(inner.u ?? ''),
+  };
+}
+
 /** LWW: побеждает больший t, при равенстве — лексикографически больший u (tie-break). */
 export function materializeWritesFromDoc(doc) {
   const arr = doc.getArray('writes');
   const cells = {};
   arr.forEach((item) => {
-    const e = item instanceof Y.AbstractType ? item.toJSON() : item;
-    if (!e || typeof e.field !== 'string') return;
-    const t = Number(e.t) || 0;
-    const u = String(e.u ?? '');
+    const e = normalizeWriteEntry(item);
+    if (!e) return;
     const prev = cells[e.field];
-    if (!prev || t > prev.t || (t === prev.t && u > prev.u)) {
-      cells[e.field] = { v: e.v, t, u };
+    if (!prev || e.t > prev.t || (e.t === prev.t && e.u > prev.u)) {
+      cells[e.field] = { v: e.v, t: e.t, u: e.u };
     }
   });
   return cells;

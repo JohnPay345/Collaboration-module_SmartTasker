@@ -7,7 +7,6 @@ export const NotificationsModel = {
       await pool.query("BEGIN");
       const currentUserDevice = await pool.query(`SELECT device_id FROM user_devices WHERE user_id = $1`, [userId]);
       let result = null;
-      console.log(currentUserDevice.rows)
       if(!currentUserDevice.rows) {
         result = await pool.query(
           `INSERT INTO user_devices (user_id, device_type, device_token, created_at) VALUES ($1, $2, $3, NOW())
@@ -15,13 +14,15 @@ export const NotificationsModel = {
           [userId, deviceType, deviceToken]
         );
       } else {
+        let deviceId = currentUserDevice.rows[0].device_id;
         result = await pool.query(
-          `UPDATE user_devices SET device_token = $1 WHERE device_id = $2`,
-          [deviceToken, currentUserDevice.rows[0].device_id]
+          `UPDATE user_devices SET device_token = $1 WHERE device_id = $2
+          RETURNING device_id`,
+          [deviceToken, deviceId]
         );
       }
 
-      if (!result.rows[0].length) {
+      if (!result.rows.length) {
         return { type: "errorMsg", errorMsg: "Error in register tokens" };
       }
       await pool.query("COMMIT");
@@ -65,7 +66,7 @@ export const NotificationsModel = {
         `SELECT device_token, device_type FROM user_devices WHERE user_id = $1`,
         [userId]
       );
-      if (!result.rows[0].length) {
+      if (!result.rows.length) {
         return { type: "errorMsg", errorMsg: `Device token for user ${userId} not found` };
       }
       return { type: "result", result: result.rows[0] };
@@ -144,7 +145,6 @@ export const NotificationsModel = {
     try {
       await pool.query("BEGIN");
       const { userId, eventType, title, body, data } = notificationData;
-      console.log(userId, eventType, title, body, data)
       const result = await pool.query(
         `INSERT INTO in_app_notifications (user_id, notification_type, notification_title, notification_body, \
         notification_data, created_at) VALUES ($1, $2, $3, $4, $5, NOW()) RETURNING notification_id`,

@@ -9,8 +9,8 @@ export const authenticateToken = (req, rep, done) => {
     return rep.code(401).send({ url: req.url, errorMsg: 'Unathorized' });
   }
   jwt.verify(token, process.env.ACCESS_SECRET_KEY, (err, user) => {
-    console.log(err)
     if (err) {
+      console.log(err)
       return rep.code(403).send({ url: req.url, errorMsg: 'Invalid token' });
     }
     req.user = user;
@@ -26,6 +26,7 @@ export const verifyRefreshToken = (req, rep, done) => {
   }
   jwt.verify(refresh_token, process.env.REFRESH_SECRET_KEY, (err, user) => {
     if(err) {
+      console.error(err);
       return rep.code(403).send({ url: req.url, errorMsg: 'Invalid Token' });
     }
     req.user = user;

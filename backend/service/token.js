@@ -6,7 +6,6 @@ export const generateTokens = (payload) => {
   if(!payload) {
     throw new Error("Payoload is empty");
   }
-  console.log(payload)
   const access_token = jwt.sign({...payload, type: "AT"}, process.env.ACCESS_SECRET_KEY, {expiresIn: process.env.ACCESS_TOKEN_LIFE});
   const refresh_token = jwt.sign({...payload, type: "RT"}, process.env.REFRESH_SECRET_KEY, {expiresIn: process.env.REFRESH_TOKEN_LIFE});
   return {access_token, refresh_token};

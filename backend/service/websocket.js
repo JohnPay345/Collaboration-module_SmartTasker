@@ -57,7 +57,6 @@ export const webSocketService = {
     if (ws && ws.readyState === WebSocket.OPEN) {
       try {
         ws.send(JSON.stringify(notification));
-        console.log(`Sent to user ${userId}:`, notification);
       } catch (error) {
         console.error('Error sending message:', error);
       }

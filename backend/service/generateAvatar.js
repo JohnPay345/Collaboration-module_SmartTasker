@@ -12,7 +12,6 @@ export const generateAvatar = async (name, filePath) => {
     radius: 50
   });
 
-  console.log(name, filePath)
   const svg = avatar.toString();
   fs.writeFile(filePath, svg, (err) => {
     if(err) {

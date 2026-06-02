@@ -9,7 +9,8 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.gregory12.smarttasker"
     },
     "android": {
       "adaptiveIcon": {
@@ -17,7 +18,8 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.gregory12.smarttasker"
+      "package": "com.gregory12.smarttasker",
+      "googleServiceFile": "./google-services.json"
     },
     "web": {
       "bundler": "metro",

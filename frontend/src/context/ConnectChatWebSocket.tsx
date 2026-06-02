@@ -17,7 +17,6 @@ export function ConnectChatWebSocket() {
     getCurrentUserId().then((userId) => {
       if (userId) connectChatWebSocket(userId);
     });
-    return () => disconnectChatWebSocket();
   }, [isAuthenticated]);
 
   return null;

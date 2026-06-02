@@ -19,6 +19,7 @@ import React, {
 import { BASE_URL } from '@/constants';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { type Notification } from '@src/api/notifications';
+import { connectChatWebSocket, subscribeNotifications } from '@src/services/chatWebSocket'
 
 const WS_BASE = BASE_URL.replace(/^http/, 'ws');
 const USER_DATA_KEY = 'user_data';
@@ -86,8 +87,6 @@ function toInboxItem(n: WsNotification): Notification {
 export function NotificationsProvider({ children }: { children: React.ReactNode }) {
   const [inboxNotifications, setInboxNotifications] = useState<Notification[]>([]);
   const [toastQueue, setToastQueue] = useState<ToastItem[]>([]);
-  const wsRef = useRef<WebSocket | null>(null);
-  const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const addFromWs = useCallback((n: WsNotification) => {
     const uid = `${n.notification_id}_${Date.now()}`;
@@ -116,62 +115,28 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
     );
   }, []);
 
-  // WebSocket подписка
   useEffect(() => {
     let mounted = true;
+    let unsubscribe: (() => void) | null = null;
 
-    const connect = async () => {
+    const init = async () => {
       const userId = await getUserId();
       if (!userId || !mounted) return;
 
-      // Уже есть открытый WS (из chatWebSocket.ts) — слушаем его через дублирующую подписку.
-      // Если нет — устанавливаем собственное WS-соединение.
-      const url = `${WS_BASE}/ws/${userId}`;
+      connectChatWebSocket(userId);
 
-      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) return;
-
-      try {
-        const ws = new WebSocket(url);
-        wsRef.current = ws;
-
-        ws.onmessage = (event) => {
-          try {
-            const data = JSON.parse(event.data as string);
-            // Формат из publisher.js: { type, action, notification: WsNotification }
-            if (data?.notification && typeof data.notification === 'object') {
-              const n = data.notification as WsNotification;
-              if (n.notification_id && n.title) {
-                addFromWs(n);
-              }
-            }
-          } catch {
-            // нотификации всегда JSON, ignore binary
-          }
-        };
-
-        ws.onclose = () => {
-          wsRef.current = null;
-          if (mounted) {
-            reconnectTimer.current = setTimeout(connect, 4000);
-          }
-        };
-
-        ws.onerror = () => {
-          wsRef.current?.close();
-          wsRef.current = null;
-        };
-      } catch (e) {
-        console.error('NotificationsContext WS error:', e);
-      }
+      unsubscribe = subscribeNotifications((n: WsNotification) => {
+        if(n.notification_id && n.title) {
+          addFromWs(n);
+        }
+      });
     };
 
-    connect();
+    init();
 
     return () => {
       mounted = false;
-      if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
-      wsRef.current?.close();
-      wsRef.current = null;
+      if(unsubscribe) unsubscribe();
     };
   }, [addFromWs]);
 

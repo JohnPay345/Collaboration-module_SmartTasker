@@ -37,7 +37,7 @@ export const TasksScreen = () => {
 
   return (
     <View style={styles.container}>
-      <Header titleScreen={"Задача"} />
+      <Header titleScreen={"Задачи"} />
 
       {isLoading ? (
         <LoadingContent loadingText={'Загрузка задач...'} />
@@ -75,48 +75,6 @@ const styles = StyleSheet.create({
     width: '100%',
     alignItems: 'center',
     backgroundColor: MainColors.white,
-  },
-  header: {
-    width: '100%',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 30,
-    paddingBottom: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: TextColors.dim_gray,
-    boxShadow: '0px 0px 10px 0px rgba(0, 0, 0, 0.4)',
-  },
-  headerTitle: {
-    fontSize: 20,
-    color: TextColors.dire_wolf,
-    fontFamily: 'Century-Regular',
-  },
-  searchContainer: {
-    width: '100%',
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-  },
-  searchInputContainer: {
-    width: '90%',
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: MainColors.snowbank,
-    borderRadius: 5,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-  },
-  searchInput: {
-    flex: 1,
-    color: '#868686',
-    fontSize: 16,
-    fontFamily: 'Century-Regular',
-  },
-  filterButton: {
-    padding: 8,
   },
   content: {
     width: '100%',

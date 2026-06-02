@@ -6,6 +6,7 @@ import { router } from 'expo-router';
 import { Tab, TabsComponent } from '@/src/components/TabsComponent';
 import { TaskInfoTab, type TaskInfoTabRef } from '@/src/tabs/tasks/TaskInfoTab';
 import { useCollaborationRoom } from '@src/collab/useCollaborationRoom';
+import { normalizeWriteEntry } from '@src/collab/lwwMaterialize';
 import { TaskDescriptionTab } from '@/src/tabs/tasks/TaskDescriptionTab';
 import { useCurrentUserId } from '@src/hooks/useCurrentUserId';
 import { useCreateTask, useTask, useUpdateTask } from '@src/api/tasks';
@@ -46,16 +47,15 @@ export const TaskScreen: React.FC<TaskScreenProps> = ({ mode = 'edit', taskId })
     const seenByField: Record<string, Set<string>> = {};
 
     // store.writes — журнал последних операций LWW. По нему вычисляем активность.
-    const writes = (collab.store?.writes ?? []) as any[];
-    for (const w of writes) {
-      if (!w || typeof w.field !== 'string') continue;
-      if (typeof w.t !== 'number' || w.t < cutoff) continue;
+    const writes = collab.store?.writes ?? [];
+    for (const raw of writes) {
+      const w = normalizeWriteEntry(raw);
+      if (!w || w.t < cutoff) continue;
 
-      const editorId = String(w.u ?? '');
-      if (!editorId || editorId === userId) continue;
+      if (!w.u || w.u === userId) continue;
 
       if (!seenByField[w.field]) seenByField[w.field] = new Set();
-      seenByField[w.field].add(editorId);
+      seenByField[w.field].add(w.u);
     }
 
     const toName = (id: string) => {

@@ -13,6 +13,7 @@ import { projectSchema, type ProjectFormData } from '@src/schemas/project.schema
 import { ProjectStatus } from '@src/types/statuses';
 import { useCurrentUserId } from '@src/hooks/useCurrentUserId';
 import { useCollaborationRoom } from '@src/collab/useCollaborationRoom';
+import { normalizeWriteEntry } from '@src/collab/lwwMaterialize';
 import { useUser } from '@src/api/users';
 
 function parseTagsFromForm(tags: string | undefined): string[] {
@@ -54,17 +55,16 @@ export const ProjectScreen = () => {
     const cutoff = now - 30_000;
 
     const seenByField: Record<string, Set<string>> = {};
-    const writes = (collab.store?.writes ?? []) as any[];
+    const writes = collab.store?.writes ?? [];
 
-    for (const w of writes) {
-      if (!w || typeof w.value.field !== 'string') continue;
-      if (typeof w.value.t !== 'number' || w.value.t < cutoff) continue;
+    for (const raw of writes) {
+      const w = normalizeWriteEntry(raw);
+      if (!w || w.t < cutoff) continue;
 
-      const editorId = String(w.value.u ?? '');
-      if (!editorId || editorId === userId) continue;
+      if (!w.u || w.u === userId) continue;
 
-      if (!seenByField[w.value.field]) seenByField[w.value.field] = new Set();
-      seenByField[w.value.field].add(editorId);
+      if (!seenByField[w.field]) seenByField[w.field] = new Set();
+      seenByField[w.field].add(w.u);
     }
 
     const toName = (id: string) => {

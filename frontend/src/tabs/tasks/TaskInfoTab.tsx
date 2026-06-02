@@ -494,7 +494,8 @@ const styles = StyleSheet.create({
   },
   label: {
     marginBottom: 5,
-    fontSize: 14,
+    fontSize: 16,
+    fontWeight: '800',
     color: TextColors.lunar_base,
     fontFamily: "Century-Regular",
   },

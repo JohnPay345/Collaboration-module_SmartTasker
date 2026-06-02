@@ -10,6 +10,8 @@ const api = axios.create({
   },
 });
 
+let retryUpdateToken = 0;
+
 api.interceptors.request.use(async (config) => {
   const token = await getToken();
   if (token) {
@@ -28,9 +30,14 @@ api.interceptors.response.use(
         const token = await getToken();
         if (!token) throw new Error('No token found');
 
+        if(retryUpdateToken == 3) {
+          throw new Error('Attempts to update token ended');
+        }
+
         const payload = JSON.parse(atob(token.split('.')[1]));
         const userId = payload.userId;
 
+        retryUpdateToken = retryUpdateToken + 1;
         const { data } = await api.get(`/api/updateTokens/${userId}`);
         if (data?.message?.access_token) {
           await setToken(data.message.access_token);

@@ -30,6 +30,8 @@ export const useNotifications = (userId: string) => {
       );
       return data.message ?? [];
     },
+    staleTime: 1000 * 60,
+    gcTime: 1000 * 60 * 15,
     enabled: !!userId,
   });
 };

@@ -49,6 +49,8 @@ export function useChatMessages(userId: string | null, chatId: string | null, pa
       );
       return data.message ?? [];
     },
+    staleTime: 0,
+    gcTime: 1000 * 60 * 15,
     enabled: !!userId && !!chatId,
   });
 }

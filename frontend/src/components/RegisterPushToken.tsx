@@ -39,9 +39,6 @@ export function RegisterPushToken() {
       const token = await getPushToken();
       if (!token) return;
 
-      const last = await AsyncStorage.getItem(LAST_PUSH_TOKEN_KEY);
-      if (last === token) return;
-
       const deviceType = getDeviceType();
       await registerTokens.mutateAsync({ userId: effectiveUserId, deviceToken: token, deviceType });
       await AsyncStorage.setItem(LAST_PUSH_TOKEN_KEY, token);

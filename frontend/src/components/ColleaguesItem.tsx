@@ -2,6 +2,7 @@ import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { BASE_URL, MainColors, TextColors } from '@/constants'
 import { router } from 'expo-router'
 import { SvgUri } from 'react-native-svg'
+import React from 'react'
 
 interface User {
   user_id: string;

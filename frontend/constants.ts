@@ -58,7 +58,8 @@ export const TextColors = {
   "ottoman_red": "#f32020",
   "beer": "#ea811a",
   "black": "#000000",
-  "white": "#ffffff"
+  "white": "#ffffff",
+  "flugger": "#deddda"
 }
 
 export const Images = {
@@ -71,5 +72,5 @@ export const Images = {
 }
 
 // Нужно поменять на локальный адрес компьютера (или забронированного сервера)
-export const BASE_URL = "http://192.168.31.154:8080"
+export const BASE_URL = process.env.EXPO_PUBLIC_BASE_URL || "http://192.168.31.154:8080"
 

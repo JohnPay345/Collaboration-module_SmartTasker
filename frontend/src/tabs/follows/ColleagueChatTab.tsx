@@ -24,7 +24,6 @@ export const ColleagueChatTab: React.FC<ColleagueChatTabProps> = ({ peerId }) =>
   const [inputText, setInputText] = useState('');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const scrollRef = useRef<ScrollView>(null);
-  // TODO: Переделать под async/await для useEffect
   const { data: chatData, isLoading: chatLoading, isSuccess: chatReady } = useGetOrCreateChat(currentUserId ?? null, peerId ?? null);
   const chatId = chatData?.chat_id ?? null;
 
@@ -102,7 +101,7 @@ export const ColleagueChatTab: React.FC<ColleagueChatTabProps> = ({ peerId }) =>
               <Text style={[styles.bubbleText, isOwn ? styles.bubbleTextOwn : styles.bubbleTextPeer]}>
                 {msg.message_text}
               </Text>
-              <Text style={styles.time}>
+              <Text style={isOwn ? styles.timeOwn : styles.timePeer}>
                 {new Date(msg.created_at).toLocaleTimeString('ru-RU', {
                   hour: '2-digit',
                   minute: '2-digit',
@@ -182,9 +181,14 @@ const styles = StyleSheet.create({
   bubbleTextPeer: {
     color: TextColors.dire_wolf ?? '#333',
   },
-  time: {
+  timeOwn: {
     fontSize: 11,
-    color: TextColors.white,
+    color: TextColors.flugger,
+    marginTop: 4,
+  },
+  timePeer: {
+    fontSize: 11,
+    color: TextColors.dim_gray,
     marginTop: 4,
   },
   send_message: {

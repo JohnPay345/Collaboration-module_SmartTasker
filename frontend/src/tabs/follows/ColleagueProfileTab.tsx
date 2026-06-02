@@ -4,9 +4,12 @@ import { LoadingContent } from '@src/components/LoadingContent'
 import { FailedLoadContent } from '@src/components/FailedLoadContent'
 import { SvgUri } from 'react-native-svg'
 import { BASE_URL, MainColors, TextColors } from '@/constants'
-import React from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { Controller } from 'react-hook-form'
 import { Tags } from '@src/components/Tags'
+import { useCurrentUserId } from '@src/hooks/useCurrentUserId'
+import { UsersFormData } from '@src/schemas/users.schema'
+import FastImage from '@d11/react-native-fast-image'
 
 type ColleagueProfileTabType = {
   user_id: string | '';
@@ -20,7 +23,8 @@ const InfoRow = ({value, title}:{value: string, title: string}) => (
 );
 
 export const ColleagueProfileTab: React.FC<ColleagueProfileTabType> = ({user_id}) => {
-  const {data, isLoading} = useUser(user_id);
+  const currentUserId = useCurrentUserId();
+  const {data, isLoading} = useUser(currentUserId ?? user_id);
 
   const formatDate = (date: Date): string => {
     const day = date.getDate().toString().padStart(2, '0');
@@ -29,50 +33,63 @@ export const ColleagueProfileTab: React.FC<ColleagueProfileTabType> = ({user_id}
     return `${day}.${month}.${year}`;
   };
 
+  const colleague = useMemo(() => {
+    const tempData = data.colleagues_list.filter(u => u.user_id == user_id)[0];
+    return tempData;
+  }, [data]);
+
   return (
     <ScrollView style={[styles.scrollView, styles.scrollViewContent]}>
-      {isLoading ? <LoadingContent loadingText={"Загрузка информации об коллеге"} /> : data ? (
+      {isLoading ? <LoadingContent loadingText={"Загрузка информации об коллеге"} /> : colleague ? (
           <View>
             <View style={styles.avatarSection}>
               <View style={styles.avatarContainer}>
-                <SvgUri uri={BASE_URL + data.avatarpath} />
+                <SvgUri uri={BASE_URL + colleague.avatarPath} />
               </View>
               <View style={styles.nameContainer}>
-                <Text style={styles.nameText}>{data.first_name}</Text>
-                <Text style={styles.nameText}>{data.middle_name}</Text>
-                <Text style={styles.nameText}>{data?.last_name}</Text>
+                <Text style={styles.nameText}>{colleague.first_name}</Text>
+                <Text style={styles.nameText}>{colleague.middle_name}</Text>
+                <Text style={styles.nameText}>{colleague?.last_name}</Text>
               </View>
             </View>
             <View style={styles.mainInfoContainer}>
               <View style={styles.infoRowMain}>
                 <Text style={styles.labelMain}>Дата рождения:</Text>
-                <Text style={styles.valueMain}>{formatDate(new Date(data?.birth_date))}</Text>
+                <Text style={styles.valueMain}>{formatDate(new Date(colleague?.birth_date))}</Text>
               </View>
               <View style={styles.infoRowMain}>
                 <Text style={styles.labelMain}>Начало работы:</Text>
-                <Text style={styles.valueMain}>{formatDate(new Date(data?.start_date))}</Text>
+                <Text style={styles.valueMain}>{formatDate(new Date(colleague?.start_date))}</Text>
               </View>
               <View style={styles.infoRowMain}>
                 <Text style={styles.labelMain}>Пол:</Text>
-                <Text style={styles.valueMain}>{data?.gender == 'Мужчина' ? 'М' : 'Ж'}</Text>
+                <Text style={styles.valueMain}>{colleague?.gender == 'Мужчина' ? 'М' : 'Ж'}</Text>
               </View>
             </View>
             <View style={styles.lastVisitContainer}>
-              <Text style={styles.lastVisitText}>Последнее посещение {new Date(data?.last_login).toLocaleString('ru-RU')?? '—'}</Text>
+              <Text style={styles.lastVisitText}>Последнее посещение {new Date(colleague?.last_login).toLocaleString('ru-RU')?? '—'}</Text>
             </View>
             <View style={styles.infoSection}>
               <View style={styles.infoRow}>
                 <Text style={styles.label}>Телефон</Text>
-                <Text style={styles.infoRowIn}>{data?.phone_number}</Text>
+                <Text style={styles.infoRowIn}>{colleague?.phone_number}</Text>
               </View>
-              <InfoRow value={data.email} title={"Email"}/>
-              <InfoRow value={data.address} title={"Адрес проживания"}/>
-              <InfoRow value={data.job_title} title={"Должность"}/>
+              <View style={styles.infoRow}>
+                <Text style={styles.label}>Email</Text>
+                <Text style={styles.infoRowIn}>{colleague.email}</Text>
+              </View>
+              <View style={styles.infoRow}>
+                <Text style={styles.label}>Адрес проживания</Text>
+                <Text style={styles.infoRowIn}>{colleague.address}</Text>
+              </View>
+              <View style={styles.infoRow}>
+                <Text style={styles.label}>Должность</Text>
+                <Text style={styles.infoRowIn}>{colleague.job_title}</Text>
+              </View>
               <Text style={styles.label}>Область знаний</Text>
-              {/*TODO: Добавить в Tags поле для изменяемости*/}
               <Tags
                 field={"skills"}
-                tagsFromAPI={data?.skills}
+                tagsFromAPI={colleague?.skills}
                 editable={false}
               />
             </View>
@@ -115,7 +132,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: TextColors.dire_wolf,
     fontFamily: 'Century-Regular',
-    marginBottom: 4,
+    marginBottom: 14,
     borderBottomWidth: 1,
     borderBottomColor: TextColors.dim_gray,
   },

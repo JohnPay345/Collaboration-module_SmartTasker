@@ -42,25 +42,29 @@ export const ProjectsScreen = () => {
           <ActivityIndicator size="large" color={MainColors.pool_water} />
           <Text style={styles.loadingText}>Загрузка проектов...</Text>
         </View>
-      ) : filteredProjects.length ? filteredProjects.map(project => {
+      ) : (
+        <ScrollView style={styles.content}>
+          {filteredProjects.length ? filteredProjects.map(project => {
             const projectTasks = tasks.filter((t) => t.project_id === project.project_id);
             const tasksCount = projectTasks.length;
             const completedTasks = projectTasks.filter(t => t.status === 'Выполнена').length;
             const deadline = project.end_date ? new Date(project.end_date).toLocaleDateString('ru-RU') : '';
             return (
-              <ScrollView style={styles.content}>
-                <ProjectItem
-                  key={project.project_id}
-                  title={project.project_name}
-                  tasksCount={tasksCount}
-                  completedTasks={completedTasks}
-                  deadline={deadline}
-                  status={project.status}
-                  onPress={() => { router.push(`/(projects)/${project.project_id}`) }}
-                />
-              </ScrollView>
-            );
-          }) : <FailedLoadContent text={"Проектов нет или же вас не пригласили"} />}
+              <ProjectItem
+                key={project.project_id}
+                title={project.project_name}
+                tasksCount={tasksCount}
+                completedTasks={completedTasks}
+                deadline={deadline}
+                status={project.status}
+                onPress={() => {
+                  router.push(`/(projects)/${project.project_id}`)
+                }}
+              />
+            )}
+          ) :  <FailedLoadContent text={"Проектов нет или же вас не пригласили"} />}
+        </ScrollView>
+      )}
 
       <Footer />
     </View>

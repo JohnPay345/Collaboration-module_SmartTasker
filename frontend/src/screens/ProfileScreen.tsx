@@ -15,6 +15,8 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { Tags } from '@src/components/Tags'
 import { LoadingContent } from '@src/components/LoadingContent'
 import { SvgUri } from 'react-native-svg'
+import { useAuth } from '@src/hooks/useAuth'
+import FastImage from '@d11/react-native-fast-image'
 
 const emptyProfileData: UsersFormData = {
   first_name: '',
@@ -93,6 +95,7 @@ export const ProfileScreen = () => {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [profileData, setProfileData] = useState(emptyProfileData);
   const [showGenderPicker, setShowGenderPicker] = useState(false);
+  const {logout} = useAuth();
 
   const userId = useCurrentUserId();
   const { data: user, isLoading } = useUser(userId ?? '');
@@ -338,9 +341,14 @@ export const ProfileScreen = () => {
               <MaterialIcons name="keyboard-arrow-right" size={35} color={TextColors.dire_wolf}/>
             </TouchableOpacity>
           </View>
-          <TouchableOpacity onPress={() => router.push(`/(password)/resetpass`)} style={styles.changePasswordButton}>
-            <Text style={styles.changePasswordText}>Изменить пароль</Text>
-          </TouchableOpacity>
+          <View style={styles.footerButtons}>
+            <TouchableOpacity onPress={() => router.push(`/(password)/resetpass`)} style={styles.changePasswordButton}>
+              <Text style={styles.changePasswordText}>Изменить пароль</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={logout} style={styles.changePasswordButton}>
+              <Text style={styles.exitBtnText}>Выйти из аккаунта</Text>
+            </TouchableOpacity>
+          </View>
         </ScrollView>
       )}
 
@@ -501,6 +509,18 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     padding: 12,
   },
+  exitBtnText: {
+    width: 180,
+    textAlign: 'center',
+    color: TextColors.ottoman_red,
+    fontSize: 14,
+    fontFamily: 'Century-Regular',
+    borderWidth: 1,
+    borderColor: MainColors.scarlet,
+    borderRadius: 8,
+    padding: 12,
+    marginLeft: 10
+  },
   lastVisitContainer: {
     marginBottom: 16,
   },
@@ -528,4 +548,7 @@ const styles = StyleSheet.create({
     color: TextColors.dire_wolf,
     fontFamily: 'Century-Regular',
   },
+  footerButtons: {
+    flexDirection: 'row'
+  }
 });

@@ -1,11 +1,13 @@
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '@/src/services/axios';
 import { useRouter } from 'expo-router';
 import { getToken, setToken, removeToken } from '@/src/services/tokenStorage';
 import { disconnectChatWebSocket } from '@/src/services/chatWebSocket';
+import AsyncStorage from '@react-native-async-storage/async-storage'
 
 export const useAuth = () => {
   const router = useRouter();
+  const queryClient = useQueryClient();
 
   const updateTokens = useMutation({
     mutationFn: async (userId: string) => {
@@ -17,7 +19,10 @@ export const useAuth = () => {
         }
         throw new Error('Failed to update tokens');
       } catch (error) {
+        disconnectChatWebSocket();
         removeToken();
+        await AsyncStorage.removeItem("user_data");
+        queryClient.clear();
         router.replace('/(auth)/login');
         throw error;
       }
@@ -40,6 +45,8 @@ export const useAuth = () => {
   const logout = async () => {
     disconnectChatWebSocket();
     removeToken();
+    await AsyncStorage.removeItem("user_data");
+    queryClient.clear();
     router.replace('/(auth)/login');
   };
 

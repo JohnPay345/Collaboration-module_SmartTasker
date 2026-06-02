@@ -16,6 +16,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useLogin, useUser, useUsers } from '@src/api/users';
 import { TextError } from '@src/components/TextError'
 import { setToken } from '@src/services/tokenStorage'
+import { useAuth } from '@src/hooks/useAuth'
 
 export const LoginScreen = () => {
   const [email, setEmail] = useState('');
@@ -23,6 +24,7 @@ export const LoginScreen = () => {
   const [errors, setErrors] = useState<{ email: string, password: string } | null>(null);
   const {defaultScreen} = useSettings();
   const login = useLogin();
+  const {logout} = useAuth();
 
   const validateForm = () => {
     let newErrors: {
@@ -47,8 +49,9 @@ export const LoginScreen = () => {
     if (errors) {
       return;
     }
+    logout();
     const response = await login.mutateAsync({email, password});
-    await AsyncStorage.setItem('user_data', JSON.stringify(response));
+    await AsyncStorage.setItem('user_data', JSON.stringify({user_id: response.message.user_id}));
     await setToken(response.message.access_token);
     router.push(defaultScreen as RelativePathString || '/tasks');
   };

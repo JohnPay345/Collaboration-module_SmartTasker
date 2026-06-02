@@ -2,37 +2,30 @@ import { View, Text, StyleSheet, Image } from 'react-native';
 import { Images, MainColors, TextColors } from '@/constants';
 import { useEffect } from 'react';
 import { router } from 'expo-router';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
-export const SplashScreen = () => {
+type SplashScreenType = {
+  authLoad: boolean;
+  fontsLoad: boolean;
+  isAuth: boolean;
+}
+
+export const SplashScreen:React.FC<SplashScreenType> = ({authLoad, fontsLoad, isAuth}) => {
   useEffect(() => {
-    const checkAuth = async () => {
-      try {
-        const accessToken = await AsyncStorage.getItem('accessToken');
-        const refreshToken = await AsyncStorage.getItem('refreshToken');
-
-        if (accessToken && refreshToken) {
-          router.replace('/main');
-        } else {
-          router.replace('/login');
-        }
-      } catch (error) {
-        console.error('Ошибка при проверке токенов:', error);
-        router.replace('/login');
+    if(!authLoad) {
+      if(isAuth) {
+        router.replace("/tasks");
+      } else {
+        router.replace('/(auth)/login');
       }
-    };
-
-    const timer = setTimeout(() => {
-      checkAuth();
-    }, 2000);
-
-    return () => clearTimeout(timer);
+    }
   }, []);
 
   return (
     <View style={[styles.container]}>
       <Image source={Images.logo} style={[styles.icon]} />
       <Text style={[styles.title]}>SmartTasker</Text>
+      {fontsLoad && <Text style={styles.loadingText}>Загрузка шрифтов...</Text>}
+      {authLoad && <Text style={styles.loadingText}>Загрузка данных...</Text>}
     </View>
   );
 };
@@ -53,5 +46,9 @@ const styles = StyleSheet.create({
     fontFamily: 'Century-Regular',
     letterSpacing: 1,
     color: TextColors.snowbank
+  },
+  loadingText: {
+    color: TextColors.snowbank,
+    fontSize: 18,
   },
 });

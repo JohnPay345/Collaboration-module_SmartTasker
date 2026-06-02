@@ -139,3 +139,10 @@ images/
 Dockerfile
 Dockerfile-*
 docker-compose.yml
+
+# .env
+.env.example.*
+
+# secrets, cert, confing
+./nginx/cert
+./scripts

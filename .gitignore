@@ -73,7 +73,9 @@ web_modules/
 .yarn-integrity
 
 # dotenv environment variable files
-.env.*
+.env.development
+.env.production
+.env
 
 # parcel-bundler cache (https://parceljs.org/)
 .cache
@@ -151,5 +153,6 @@ google-services.json
 /frontend/android
 /frontend/ios
 
-# nginx certs
+# nginx certs and secrets
 /backend/nginx/certs
+/backend/secrets

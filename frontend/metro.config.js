@@ -1,22 +1,19 @@
 const { getDefaultConfig } = require('expo/metro-config');
 
-module.exports = (() => {
-  const config = getDefaultConfig(__dirname);
+const config = getDefaultConfig(__dirname);
 
-  const { transformer, resolver } = config;
+config.resolver.resolveRequest = (context, moduleName, platform) => {
+  // Если кто-то (например, lib0) пытается импортировать упавший модуль
+  // if (moduleName.startsWith('isomorphic-webcrypto')) {
+  //   return context.resolveRequest(
+  //     context,
+  //     'expo-crypto', // Подменяем на установленный у вас рабочий expo-crypto
+  //     platform
+  //   );
+  // }
 
-  config.transformer = {
-    ...transformer,
-    babelTransformerPath: require.resolve('react-native-svg-transformer'),
-  };
+  // Для всех остальных модулей используем стандартную логику Expo
+  return context.resolveRequest(context, moduleName, platform);
+};
 
-  config.resolver = {
-    ...resolver,
-    assetExts: resolver.assetExts.filter((ext) => ext !== 'svg'),
-    sourceExts: [...resolver.sourceExts, 'svg'],
-  };
-
-  config.resolver.unstable_enablePackageExports = true;
-
-  return config;
-})(); 
+module.exports = config;

@@ -1,10 +1,15 @@
 import WebSocket from 'ws';
 import * as Y from 'yjs';
 import { log, sleep } from './botHelpers.js';
+import { MetricsCollector } from './botMetrics.js';
+
+function writeKey(entry) {
+  return `${entry.field}:${entry.t}:${entry.u}`;
+}
 
 export class CollabBotClient {
   /**
-   * @param {{ wsBase: string; userId: string; entityKind: 'task' | 'project'; entityId: string; label?: string }} opts
+   * @param {{ wsBase: string; userId: string; entityKind: 'task' | 'project'; entityId: string; label?: string; metrics?: MetricsCollector | null }} opts
    */
   constructor(opts) {
     this.wsBase = opts.wsBase.replace(/\/$/, '');
@@ -12,17 +17,23 @@ export class CollabBotClient {
     this.entityKind = opts.entityKind;
     this.entityId = opts.entityId;
     this.label = opts.label ?? opts.userId.slice(0, 8);
+    this.metrics = opts.metrics ?? null;
     this.doc = new Y.Doc();
     /** @type {WebSocket | null} */
     this.ws = null;
     this.connected = false;
     this.writesSent = 0;
     this.updatesReceived = 0;
+    /** @type {Set<string>} */
+    this.seenWriteKeys = new Set();
     /** @type {((update: Uint8Array) => void) | null} */
     this.onRemoteUpdate = null;
 
     this._onDocUpdate = (update, origin) => {
-      if (origin === 'remote') return;
+      if (origin === 'remote') {
+        this._trackIncomingWrites();
+        return;
+      }
       if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
       try {
         this.ws.send(Buffer.from(update));
@@ -34,6 +45,37 @@ export class CollabBotClient {
 
   get url() {
     return `${this.wsBase}/ws/yjs/${encodeURIComponent(this.userId)}/${this.entityKind}/${encodeURIComponent(this.entityId)}`;
+  }
+
+  _trackIncomingWrites() {
+    const now = Date.now();
+    const arr = this.doc.getArray('writes');
+    arr.forEach((item) => {
+      const e = item instanceof Y.AbstractType ? item.toJSON() : item;
+      if (!e || typeof e.field !== 'string') return;
+      const key = writeKey(e);
+      if (this.seenWriteKeys.has(key)) return;
+      this.seenWriteKeys.add(key);
+
+      const author = String(e.u ?? '');
+      if (author === this.userId) return;
+
+      const sentAt = Number(e.t) || 0;
+      if (sentAt > 0) {
+        const latency = now - sentAt;
+        this.metrics?.recordLatency(latency);
+      }
+      this.metrics?.recordEvent(now);
+    });
+  }
+
+  _seedSeenWrites() {
+    const arr = this.doc.getArray('writes');
+    arr.forEach((item) => {
+      const e = item instanceof Y.AbstractType ? item.toJSON() : item;
+      if (!e || typeof e.field !== 'string') return;
+      this.seenWriteKeys.add(writeKey(e));
+    });
   }
 
   async connect(timeoutMs = 15000) {
@@ -62,6 +104,7 @@ export class CollabBotClient {
           this.onRemoteUpdate?.(u8);
           if (!this.connected) {
             this.connected = true;
+            this._seedSeenWrites();
             clearTimeout(timer);
             log(this.label, `подключён к ${this.entityKind}/${this.entityId}`);
             resolve();
@@ -159,10 +202,12 @@ const TASK_LOAD_FIELDS = [
 ];
 
 const PROJECT_LOAD_FIELDS = [
-  { field: 'project_name', values: ['[Load] Проект X', '[Load] Проект Y', '[Load] Проект Z'] },
-  { field: 'description', values: ['Load bot 1', 'Load bot 2', 'Load bot 3'] },
-  { field: 'status', values: ['В работе', 'Черновик'] },
-  { field: 'tags', values: [['alpha'], ['beta', 'gamma'], ['load-test']] },
+  { field: 'project_name', values: ['[Load] Проект X', '[Load] Проект Y', '[Load] Проект Z', '[Load] Проект A', '[Load] Проект B', '[Load] Проект C',
+    '[Load] Проект D', '[Load] Проект E'] },
+  { field: 'description', values: ['Load bot 1', 'Load bot 2', 'Load bot 3', 'Load bot 4', 'Load bot 5', 'Load bot 6', 'Load bot 7', 'Load bot 8'] },
+  { field: 'status', values: ['В работе', 'Черновик', 'Выполнена', 'Неактуальна', 'Провален', 'Черновик', 'Приостановлен'] },
+  { field: 'tags', values: [['alpha'], ['beta', 'gamma'], ['load-test'], ['tag 1', 'tag 2'], ['synchronization', 'programming', 'work'], 
+    ['UI', 'Analyze'], ['boncho']] },
 ];
 
 /**
@@ -178,7 +223,7 @@ export async function runFunctionalScenario(bot, kind, steps) {
     bot.pushWrite(step.field, step.value);
     if (step.label) log(bot.label, `шаг: ${step.label}`);
   }
-  await sleep(1000);
+  await sleep(1500);
   log(bot.label, `готово, отправлено writes: ${bot.writesSent}, получено updates: ${bot.updatesReceived}`);
 }
 
@@ -213,4 +258,25 @@ export async function runLoadScenario(bots, kind, opts) {
   const totalUpdates = bots.reduce((s, b) => s + b.updatesReceived, 0);
   log('load', `завершено: writes=${totalWrites}, updates=${totalUpdates}`);
   return { totalWrites, totalUpdates };
+}
+
+/**
+ * Агрегирует метрики всех ботов в один отчёт (для collab-load).
+ * @param {CollabBotClient[]} bots
+ * @param {string} label
+ */
+export function aggregateCollabMetrics(bots, label) {
+  const combined = new MetricsCollector(label);
+  combined.startedAt = Math.min(...bots.map((b) => b.metrics?.startedAt ?? Date.now()));
+  combined.endedAt = Math.max(...bots.map((b) => b.metrics?.endedAt ?? Date.now()));
+
+  for (const bot of bots) {
+    const m = bot.metrics;
+    if (!m) continue;
+    for (const ms of m.latenciesMs) combined.recordLatency(ms);
+    for (const [sec, count] of m.eventsBySecond) {
+      combined.eventsBySecond.set(sec, (combined.eventsBySecond.get(sec) ?? 0) + count);
+    }
+  }
+  return combined;
 }

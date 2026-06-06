@@ -2,8 +2,8 @@ import { randomUUID } from 'node:crypto';
 
 /** @typedef {{ name: string; type: 'string' | 'boolean' | 'number' | 'array' }} ArgSpec */
 
-export const DEFAULT_WS_BASE = process.env.WS_BASE || 'ws://localhost:8080';
-export const DEFAULT_API_BASE = process.env.API_BASE || 'http://localhost:8080';
+export const DEFAULT_WS_BASE = process.env.WS_BASE || 'wss://smarttasker.ru';
+export const DEFAULT_API_BASE = process.env.API_BASE || 'https://smarttasker.ru';
 
 /** Тестовые аккаунты из psql-config/insert-data.sql */
 export const SEED_BOT_ACCOUNTS = [
@@ -106,6 +106,7 @@ export async function apiGetOrCreateChat(apiBase, accessToken, userId, peerId) {
 }
 
 export async function apiSendChatMessage(apiBase, accessToken, userId, chatId, messageText) {
+  const startedAt = Date.now();
   const res = await fetch(`${apiBase}/api/chats/${userId}/${chatId}/messages`, {
     method: 'POST',
     headers: {
@@ -114,11 +115,12 @@ export async function apiSendChatMessage(apiBase, accessToken, userId, chatId, m
     },
     body: JSON.stringify({ data: { message_text: messageText } }),
   });
+  const restLatencyMs = Date.now() - startedAt;
   const body = await res.json().catch(() => ({}));
   if (!res.ok) {
     throw new Error(`sendMessage failed (${res.status}): ${JSON.stringify(body.message ?? body)}`);
   }
-  return body.message ?? body.result;
+  return { message: body.message ?? body.result, restLatencyMs };
 }
 
 export function formatTs() {

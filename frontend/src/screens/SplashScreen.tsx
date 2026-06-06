@@ -1,7 +1,7 @@
 import { View, Text, StyleSheet, Image } from 'react-native';
 import { Images, MainColors, TextColors } from '@/constants';
 import { useEffect } from 'react';
-import { router } from 'expo-router';
+import { router, Slot } from 'expo-router';
 
 type SplashScreenType = {
   authLoad: boolean;
@@ -10,16 +10,6 @@ type SplashScreenType = {
 }
 
 export const SplashScreen:React.FC<SplashScreenType> = ({authLoad, fontsLoad, isAuth}) => {
-  useEffect(() => {
-    if(!authLoad) {
-      if(isAuth) {
-        router.replace("/tasks");
-      } else {
-        router.replace('/(auth)/login');
-      }
-    }
-  }, []);
-
   return (
     <View style={[styles.container]}>
       <Image source={Images.logo} style={[styles.icon]} />

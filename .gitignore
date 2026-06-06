@@ -152,6 +152,7 @@ google-services.json
 # build android, ios
 /frontend/android
 /frontend/ios
+/frontend/.expo/*
 
 # nginx certs and secrets
 /backend/nginx/certs

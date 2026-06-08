@@ -3,7 +3,6 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, Activi
 import { useRouter } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
 import { BASE_URL, MainColors, TextColors } from '@/constants';
-import { LocaleConfig } from 'react-native-calendars';
 import { HeaderEditor } from '@src/components/HeaderEditor';
 import { useCurrentUserId } from '@src/hooks/useCurrentUserId';
 import { useUser, type User } from '@src/api/users';
@@ -15,8 +14,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { Tags } from '@src/components/Tags'
 import { LoadingContent } from '@src/components/LoadingContent'
 import { SvgUri } from 'react-native-svg'
-import { useAuth } from '@src/hooks/useAuth'
-import FastImage from '@d11/react-native-fast-image'
+import { useAuth } from '@src/context/AuthContext'
 
 const emptyProfileData: UsersFormData = {
   first_name: '',
@@ -33,28 +31,6 @@ const emptyProfileData: UsersFormData = {
   last_login: new Date().toLocaleString(),
   skills: '',
 };
-
-LocaleConfig.locales['ru'] = {
-  monthNames: [
-    'Январь',
-    'Февраль',
-    'Март',
-    'Апрель',
-    'Май',
-    'Июнь',
-    'Июль',
-    'Август',
-    'Сентябрь',
-    'Октябрь',
-    'Ноябрь',
-    'Декабрь'
-  ],
-  monthNamesShort: ['Янв.', 'Февр.', 'Март', 'Апр.', 'Май', 'Июнь', 'Июль', 'Авг.', 'Сент.', 'Окт.', 'Нояб.', 'Дек.'],
-  dayNames: ['Воскресенье', 'Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота'],
-  dayNamesShort: ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'],
-  today: "Сегодня",
-};
-LocaleConfig.defaultLocale = 'ru';
 
 const InfoRowMain = ({control, field, title, onPress}:{control: any, field: string, title: string, onPress: () => void}) => (
   <Controller
@@ -166,7 +142,7 @@ export const ProfileScreen = () => {
   };
 
   const changeShowPicker = (picker: string, isShow: boolean)=> {
-    if(picker == 'DatePicker') {
+    if(picker == 'Date Picker') {
       setShowDatePicker(isShow);
     } else if(picker == 'GenderPicker') {
       setShowGenderPicker(isShow);
@@ -203,7 +179,7 @@ export const ProfileScreen = () => {
                 control={control}
                 render={({field: {onChange, onBlur, value}}) => (
                   <SvgUri style={styles.avatarImage}
-                          uri={BASE_URL + user.avatarpath} />
+                          uri={BASE_URL + user?.avatarpath} />
                 )}
               />
             </View>

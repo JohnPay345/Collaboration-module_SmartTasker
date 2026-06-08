@@ -69,6 +69,10 @@ export const DatePickerProfile:React.FC<DatePickerProfileType> = ({
     setShowMonthYearPicker(false);
   };
 
+  if (!LocaleConfig.locales[LocaleConfig.defaultLocale]) {
+    LocaleConfig.defaultLocale = '';
+  }
+
   return (
     <>
       <Modal

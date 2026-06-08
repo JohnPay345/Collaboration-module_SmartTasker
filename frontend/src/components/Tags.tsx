@@ -78,6 +78,7 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 16,
     fontWeight: '600',
+    fontFamily: 'Century-Regular',
     color: TextColors.dim_gray,
     marginBottom: 8,
   },

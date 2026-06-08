@@ -495,7 +495,7 @@ const styles = StyleSheet.create({
   label: {
     marginBottom: 5,
     fontSize: 16,
-    fontWeight: '800',
+    fontWeight: '600',
     color: TextColors.lunar_base,
     fontFamily: "Century-Regular",
   },
@@ -551,7 +551,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   assignButton: {
-    width: 180,
+    width: '100%',
     backgroundColor: MainColors.herbery_honey,
     padding: 12,
     borderRadius: 4,
@@ -588,7 +588,7 @@ const styles = StyleSheet.create({
     fontFamily: "Century-Regular",
   },
   deleteButton: {
-    width: 150,
+    width: '100%',
     padding: 12,
     borderRadius: 4,
     alignItems: "center",

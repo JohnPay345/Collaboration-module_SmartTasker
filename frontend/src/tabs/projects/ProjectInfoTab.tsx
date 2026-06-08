@@ -239,7 +239,7 @@ export const ProjectInfoTab: React.FC<ProjectInfoTabProps> = ({
       <View style={styles.section}>
         <Text style={styles.label}>Команда проекта</Text>
         <View style={[styles.input, { padding: 12 }]}>
-          <Text style={{ color: TextColors.dim_gray }}>{assignmentSummary}</Text>
+          <Text style={{ color: TextColors.dim_gray, fontFamily: 'Century-Regular' }}>{assignmentSummary}</Text>
         </View>
         {isEditable && colleagues.length > 0 ? (
           <TouchableOpacity
@@ -313,6 +313,7 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 16,
     fontWeight: '600',
+    fontFamily: 'Century-Regular',
     color: TextColors.dim_gray,
     marginBottom: 8,
   },
@@ -322,6 +323,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     padding: 12,
     fontSize: 16,
+    fontFamily: 'Century-Regular',
     color: TextColors.dim_gray,
   },
   textArea: {
@@ -330,6 +332,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     padding: 12,
     fontSize: 16,
+    fontFamily: 'Century-Regular',
     color: TextColors.dim_gray,
     minHeight: 100,
     textAlignVertical: 'top',
@@ -394,6 +397,7 @@ const styles = StyleSheet.create({
   addTagText: {
     color: MainColors.pool_water,
     fontSize: 16,
+    fontFamily: 'Century-Regular'
   },
   teamRow: {
     padding: 12,

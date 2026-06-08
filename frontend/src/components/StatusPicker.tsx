@@ -56,6 +56,7 @@ export const StatusPicker: React.FC<StatusPickerProps> = ({
               style={[
                 value == status && {color: getStatusColorText(status)},
                 disabled && styles.disabledText,
+                {fontFamily: 'Century-Regular'}
               ]}
             >
               {status}

@@ -42,18 +42,9 @@ export const useAuth = () => {
     staleTime: Infinity,
   });
 
-  const logout = async () => {
-    disconnectChatWebSocket();
-    removeToken();
-    await AsyncStorage.removeItem("user_data");
-    queryClient.clear();
-    router.replace('/(auth)/login');
-  };
-
   return {
     updateTokens,
     checkAuth,
-    logout,
     isAuthenticated: !!checkAuth.data,
     isLoading: checkAuth.isLoading,
     error: checkAuth.error

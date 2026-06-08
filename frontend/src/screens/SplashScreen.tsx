@@ -3,19 +3,11 @@ import { Images, MainColors, TextColors } from '@/constants';
 import { useEffect } from 'react';
 import { router, Slot } from 'expo-router';
 
-type SplashScreenType = {
-  authLoad: boolean;
-  fontsLoad: boolean;
-  isAuth: boolean;
-}
-
-export const SplashScreen:React.FC<SplashScreenType> = ({authLoad, fontsLoad, isAuth}) => {
+export const SplashScreen = () => {
   return (
     <View style={[styles.container]}>
       <Image source={Images.logo} style={[styles.icon]} />
       <Text style={[styles.title]}>SmartTasker</Text>
-      {fontsLoad && <Text style={styles.loadingText}>Загрузка шрифтов...</Text>}
-      {authLoad && <Text style={styles.loadingText}>Загрузка данных...</Text>}
     </View>
   );
 };

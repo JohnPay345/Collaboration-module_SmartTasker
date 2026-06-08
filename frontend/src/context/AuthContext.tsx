@@ -1,22 +1,28 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { getToken } from '@src/services/tokenStorage'
-import { useCurrentUserId } from '@src/hooks/useCurrentUserId'
+import { getToken, setToken, removeToken } from '@src/services/tokenStorage'
 import AsyncStorage from '@react-native-async-storage/async-storage'
-import { useUser } from '@src/api/users'
+import { router } from 'expo-router';
+import { disconnectChatWebSocket } from '@/src/services/chatWebSocket';
+import { useQueryClient } from '@tanstack/react-query';
 
 type AuthContextType = {
   loading: boolean;
   isAuthenticated: boolean;
+  login: (response: any) => void;
+  logout: () => void;
 }
 
 const AuthContext = createContext<AuthContextType>({
   loading: true,
-  isAuthenticated: false
+  isAuthenticated: false,
+  login: (response: any) => {},
+  logout: () => {}
 });
 
 export const AuthProvider = ({children}: {children: React.ReactNode}) => {
   const [loading, setLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const queryClient = useQueryClient();
 
   const bootstrap = async () => {
     try {
@@ -42,11 +48,29 @@ export const AuthProvider = ({children}: {children: React.ReactNode}) => {
     bootstrap();
   }, []);
 
+  const login = async (response: any) => {
+    await AsyncStorage.setItem('user_data', JSON.stringify({user_id: response.message.user_id}));
+    await setToken(response.message.access_token);
+    setIsAuthenticated(true);
+    setLoading(false);
+  }
+
+  const logout = async () => {
+    disconnectChatWebSocket();
+    removeToken();
+    await AsyncStorage.removeItem("user_data");
+    queryClient.clear();
+    setIsAuthenticated(false);
+    setLoading(true);
+  };
+
   return (
     <AuthContext.Provider
       value={{
         loading,
-        isAuthenticated
+        isAuthenticated,
+        login,
+        logout
       }}
     >
       {children}

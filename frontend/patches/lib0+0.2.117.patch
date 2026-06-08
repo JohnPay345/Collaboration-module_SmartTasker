@@ -1,0 +1,32 @@
+diff --git a/node_modules/lib0/dist/webcrypto.react-native.cjs b/node_modules/lib0/dist/webcrypto.react-native.cjs
+index 4e6d3c4..299b996 100644
+--- a/node_modules/lib0/dist/webcrypto.react-native.cjs
++++ b/node_modules/lib0/dist/webcrypto.react-native.cjs
+@@ -2,18 +2,17 @@
+ 
+ Object.defineProperty(exports, '__esModule', { value: true });
+ 
+-var webcrypto = require('isomorphic-webcrypto/src/react-native');
++// Подключаем нативный expo-crypto
++var ExpoCrypto = require('expo-crypto');
+ 
+-function _interopDefaultLegacy (e) { return e && typeof e === 'object' && 'default' in e ? e : { 'default': e }; }
++var getRandomValues = function (array) {
++  var randomBytes = ExpoCrypto.getRandomBytes(array.length);
++  array.set(randomBytes);
++  return array;
++};
+ 
+-var webcrypto__default = /*#__PURE__*/_interopDefaultLegacy(webcrypto);
+-
+-// @ts-ignore
+-
+-webcrypto__default["default"].ensureSecure();
+-
+-const subtle = webcrypto__default["default"].subtle;
+-const getRandomValues = webcrypto__default["default"].getRandomValues.bind(webcrypto__default["default"]);
++// Безопасно проверяем subtle через стандартизированный globalThis
++var subtle = (typeof globalThis !== 'undefined' && globalThis.crypto) ? globalThis.crypto.subtle : undefined;
+ 
+ exports.getRandomValues = getRandomValues;
+ exports.subtle = subtle;

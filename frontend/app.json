@@ -26,6 +26,10 @@
       "output": "static",
       "favicon": "./src/assets/logos/web-icon.png"
     },
+    "notification": {
+      "icon":"./src/assets/logos/icon-monochrome.png",
+      "color": "#7d7c7c"
+    },
     "plugins": [
       "expo-router",
       [
